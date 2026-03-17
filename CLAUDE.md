@@ -216,9 +216,9 @@ stello-data/
 ## 当前进度
 
 - [x] 仓库创建（.gitignore, LICENSE, README）
-- [ ] 项目初始化（monorepo + TS + Vitest + tsup）← **当前**
-- [ ] types.ts 全量接口定义
-- [ ] FileSystemAdapter
+- [x] 项目初始化（monorepo + TS + Vitest + tsup）`9af6b04`
+- [x] types.ts 全量接口定义 `c684697`
+- [ ] FileSystemAdapter ← **当前**
 - [ ] SessionTree CRUD + 跨分支引用
 - [ ] L1 核心档案（schema + 点路径读写 + onChange）
 - [ ] L2 摘要读写 + summaryExtractor 接口
@@ -238,7 +238,8 @@ stello-data/
 
 ## 最近改动日志
 
-（每次完成任务后追加）
+- `9af6b04` chore(init): 初始化 monorepo 项目结构 — pnpm workspace、TypeScript 严格模式、tsup 打包、Vitest、ESLint + Prettier、.claude/settings.json
+- `c684697` feat(types): 定义全量接口 — 拆为 5 个子文件 (session/memory/fs/lifecycle/engine) + types.ts 统一再导出
 
 ## 设计决策记录
 
