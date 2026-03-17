@@ -3,6 +3,16 @@
   "version": "0.1.0",
   "description": "Star-map visualization for Stello conversation topology",
   "license": "Apache-2.0",
+  "author": "Stello Contributors",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/stello-agent/stello.git",
+    "directory": "packages/visualizer"
+  },
+  "homepage": "https://github.com/stello-agent/stello#readme",
+  "bugs": "https://github.com/stello-agent/stello/issues",
+  "keywords": ["ai", "agent", "visualization", "star-map", "constellation", "canvas", "react", "session", "topology"],
+  "sideEffects": false,
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",

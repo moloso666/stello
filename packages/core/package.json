@@ -3,6 +3,16 @@
   "version": "0.1.0",
   "description": "The first open-source conversation topology engine",
   "license": "Apache-2.0",
+  "author": "Stello Contributors",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/stello-agent/stello.git",
+    "directory": "packages/core"
+  },
+  "homepage": "https://github.com/stello-agent/stello#readme",
+  "bugs": "https://github.com/stello-agent/stello/issues",
+  "keywords": ["ai", "agent", "conversation", "session", "memory", "tree", "branching", "llm", "topology"],
+  "sideEffects": false,
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
