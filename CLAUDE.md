@@ -252,9 +252,8 @@ stello-data/
 - [x] 冒泡机制（bubbleable + debounce + 冲突处理）`841bf9b`
 - [x] 拆分策略 + 确认协议（SplitGuard + ConfirmManager）`066bdbc`
 - [x] Skill 插槽 + Agent Tools（SkillRouterImpl + AgentTools）`8b9dd7e`
-- [ ] **生命周期完整串联 + 集成测试** ← **当前**
-- [ ] 生命周期完整串联 + 集成测试
-- [ ] 星空图布局 + Canvas 渲染 + 交互
+- [x] 生命周期完整串联 + 集成测试（9 个用例覆盖完整生命周期）
+- [ ] **星空图布局 + Canvas 渲染 + 交互** ← **当前**
 - [ ] StelloGraph React 组件
 - [ ] 终端 demo
 - [ ] README + Quickstart
@@ -273,6 +272,7 @@ stello-data/
 - `841bf9b` feat(memory): 实现冒泡机制 BubbleManager — 6 个测试，累计 71 个
 - `066bdbc` feat(confirm): 实现确认协议 + 拆分保护机制 — 11 个测试，累计 82 个
 - `8b9dd7e` feat(skill+tools): 实现 Skill 插槽 + Agent Tools — 16 个测试，累计 98 个
+- `724cea0` test(integration): 端到端集成测试 — 9 个用例覆盖完整生命周期，累计 107 个
 
 ## 设计决策记录
 

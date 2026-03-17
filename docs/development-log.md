@@ -524,19 +524,60 @@ SplitGuard 检查 Session 是否满足拆分条件，防止过早或过于频繁
 
 ---
 
+## Phase 7：生命周期完整串联 + 集成测试
+
+**时间**：2026-03-17
+**测试**：107 个（+integration-basic 5 + integration-advanced 4）
+
+### 7.1 集成测试概述
+
+所有核心模块已实现（CoreMemory / SessionMemory / SessionTreeImpl / LifecycleManager / BubbleManager / ConfirmManager / SplitGuard / SkillRouterImpl / AgentTools），共 98 个单元测试通过。本次编写端到端集成测试，验证模块间协作的完整流程。
+
+**文件拆分**：两个文件，每个控制在 200 行以内。
+
+| 文件 | 用例数 | 覆盖场景 |
+|------|--------|----------|
+| `src/__tests__/integration-basic.test.ts` | 5 | 初始化 + bootstrap + Skill + 一轮对话 + 创建子 Session + 拆分保护 |
+| `src/__tests__/integration-advanced.test.ts` | 4 | Session 切换 + 冒泡 + 归档 + 跨分支引用 |
+
+### 7.2 integration-basic（5 个用例）
+
+| # | 测试名 | 验证点 |
+|---|--------|--------|
+| 1 | 初始化 + bootstrap 根 Session | context.core 包含 schema 默认值，session.id 正确 |
+| 2 | 注册 Skill + 匹配命中 | SkillRouter 正确匹配关键词 |
+| 3 | 一轮对话 L1/L2/L3 全写入 | records.jsonl 2 条，memory.md 更新，core.json name 字段更新 |
+| 4 | 通过 AgentTools 创建子 Session | SplitGuard 通过 → 子 Session 创建 + scope.md + 父 index.md |
+| 5 | 拆分保护拒绝（轮次不足） | success: false，reason 包含"轮次不足" |
+
+**Setup**：全部模块实例化（NodeFileSystemAdapter → CoreMemory → SessionMemory → SessionTreeImpl → LifecycleManager → SplitGuard → SkillRouterImpl → AgentTools），共享 testSchema（name/gpa/schools）和 mockCallLLM。
+
+### 7.3 integration-advanced（4 个用例）
+
+| # | 测试名 | 验证点 |
+|---|--------|--------|
+| 1 | 切换 Session：旧 memory 更新 + 新 bootstrap | 旧 Session memory.md 更新，返回新 Session 的 BootstrapResult |
+| 2 | 冒泡：子 Session afterTurn 写入全局 core.json | core.json name 字段已通过冒泡更新 |
+| 3 | 归档子 Session | session.status === 'archived' |
+| 4 | 跨分支引用 | from.refs 包含 to.id |
+
+**Setup**：同 basic，额外使用 `vi.useFakeTimers()` 确保 debounce 可控，beforeEach 中创建子 Session 并设置 turnCount=5。
+
+---
+
 ## 当前代码统计
 
 | 指标 | 数量 |
 |------|------|
 | 类型接口文件 | 5 个（types/ 目录） |
-| 实现文件 | 11 个（+skill-router, agent-tools, definitions） |
-| 测试文件 | 11 个 |
-| 测试用例 | 98 个（全部通过） |
+| 实现文件 | 11 个 |
+| 测试文件 | 13 个（+2 集成测试） |
+| 测试用例 | 107 个（全部通过） |
 | 导出类型 | 26 个 |
-| 导出实现 | 10 个（+SkillRouterImpl, AgentTools） |
+| 导出实现 | 10 个 |
 
 ---
 
-## 下一步：Phase 7 — 生命周期完整串联 + 集成测试
+## 下一步：Phase 8 — 星空图布局 + Canvas 渲染 + 交互
 
-串联所有模块，端到端集成测试验证完整工作流。
+进入 `@stello-ai/visualizer` 包，实现星空图可视化。
