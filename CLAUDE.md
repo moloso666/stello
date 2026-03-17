@@ -247,7 +247,7 @@ stello-data/
 - [x] FileSystemAdapter `efeefeb`
 - [x] SessionTree CRUD + 跨分支引用 `ac64dc2`
 - [x] 架构变更：Session 文件从 summary.json 改为 memory.md / scope.md / index.md `320b3d8`
-- [ ] **记忆系统（L1 core.json ✅ + L2 memory.md + L3 records.jsonl）** ← **当前**
+- [ ] **记忆系统（L1 core.json ✅ + L2/L3 SessionMemory ✅ + assembleContext）** ← **当前**
 - [ ] bootstrap + assemble + afterTurn + onSessionSwitch 钩子
 - [ ] 冒泡机制（bubbleable + debounce + 冲突处理）
 - [ ] 拆分策略 + 保护机制
@@ -269,6 +269,7 @@ stello-data/
 - `ac64dc2` feat(session): 实现 SessionTree — createRoot/createChild/get/archive/addRef/updateMeta + 15 个测试
 - `320b3d8` refactor(types): Session 文件从 summary.json 改为 memory.md / scope.md / index.md — 28 个测试
 - `3dea1bb` feat(memory): 实现 L1 核心档案 CoreMemory — 12 个测试，累计 40 个
+- `12fa359` feat(memory): 实现 L2 + L3 SessionMemory — 10 个测试，累计 50 个
 
 ## 设计决策记录
 

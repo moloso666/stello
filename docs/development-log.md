@@ -304,6 +304,32 @@ CoreMemory 管理全局 `core.json`（L1 核心档案），是记忆系统三层
 - requireConfirm 触发 proposal + 数据不变
 - confirmWrite 写入 + change 事件
 
+### 3.2 L2 + L3 SessionMemory
+
+**时间**：2026-03-17
+**Commit**：`12fa359`
+**测试**：50 个（fs 11 + session 17 + core-memory 12 + session-memory 10）
+
+**文件**：`memory/session-memory.ts`（`SessionMemory` 类）
+
+SessionMemory 是 FileSystemAdapter 的 Session 路径封装层，将底层文件操作映射为语义化的记忆读写方法。
+
+**设计**：所有方法都是一层薄委托，核心是路径映射 `sessions/{sessionId}/{filename}`。
+
+| 方法 | 文件 | 底层调用 |
+|------|------|----------|
+| `readMemory` / `writeMemory` | `memory.md` | `fs.readFile` / `fs.writeFile` |
+| `readScope` / `writeScope` | `scope.md` | `fs.readFile` / `fs.writeFile` |
+| `readIndex` / `writeIndex` | `index.md` | `fs.readFile` / `fs.writeFile` |
+| `appendRecord` | `records.jsonl` | `fs.appendLine(JSON.stringify)` |
+| `readRecords` | `records.jsonl` | `fs.readLines` → `map(JSON.parse)` |
+
+**L3 存储格式**：JSONL（每行一个 JSON 对象），每条记录是一个 `TurnRecord { role, content, timestamp, metadata? }`。
+
+**测试覆盖（10 个）**：
+- memory.md / scope.md / index.md：正常读写 + 空文件 + 不存在返回 null
+- records.jsonl：追加读取 + 无记录空数组 + 多条记录顺序正确
+
 ---
 
 ## 当前代码统计
@@ -311,14 +337,14 @@ CoreMemory 管理全局 `core.json`（L1 核心档案），是记忆系统三层
 | 指标 | 数量 |
 |------|------|
 | 类型接口文件 | 5 个（types/ 目录） |
-| 实现文件 | 3 个（file-system-adapter.ts, session-tree.ts, core-memory.ts） |
-| 测试文件 | 3 个 |
-| 测试用例 | 40 个（全部通过） |
+| 实现文件 | 4 个（file-system-adapter, session-tree, core-memory, session-memory） |
+| 测试文件 | 4 个 |
+| 测试用例 | 50 个（全部通过） |
 | 导出类型 | 25 个 |
-| 导出实现 | 3 个（NodeFileSystemAdapter, SessionTreeImpl, CoreMemory） |
+| 导出实现 | 4 个（NodeFileSystemAdapter, SessionTreeImpl, CoreMemory, SessionMemory） |
 
 ---
 
-## 下一步：Phase 3 继续 — L2 memory.md + L3 records.jsonl
+## 下一步：Phase 3 继续 — assembleContext
 
-实现 MemoryEngine 剩余部分：L2 markdown 文件读写 + L3 JSONL 追加/检索 + 按继承策略组装上下文。
+实现 MemoryEngine 的上下文组装：按继承策略（full/summary/minimal/scoped）收集祖先 memory.md，组装为 AssembledContext。
