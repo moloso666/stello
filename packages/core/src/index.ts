@@ -44,3 +44,6 @@ export type {
   StelloConfig,
   StelloEngine,
 } from './types';
+
+// 导出实现
+export { NodeFileSystemAdapter } from './fs';
