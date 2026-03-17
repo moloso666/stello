@@ -1,4 +1,11 @@
-import { readFile, writeFile, appendFile, mkdir, access, readdir } from 'node:fs/promises';
+import {
+  readFile as fsReadFile,
+  writeFile as fsWriteFile,
+  appendFile,
+  mkdir,
+  access,
+  readdir,
+} from 'node:fs/promises';
 import { join, dirname } from 'node:path';
 import type { FileSystemAdapter } from '../types/fs';
 
@@ -27,7 +34,7 @@ export class NodeFileSystemAdapter implements FileSystemAdapter {
 
   async readJSON<T>(path: string): Promise<T | null> {
     try {
-      const raw = await readFile(this.resolve(path), 'utf-8');
+      const raw = await fsReadFile(this.resolve(path), 'utf-8');
       return JSON.parse(raw) as T;
     } catch (err) {
       if (isNotFound(err)) return null;
@@ -38,7 +45,7 @@ export class NodeFileSystemAdapter implements FileSystemAdapter {
   async writeJSON(path: string, data: unknown): Promise<void> {
     const full = this.resolve(path);
     await this.ensureDir(full);
-    await writeFile(full, JSON.stringify(data, null, 2) + '\n', 'utf-8');
+    await fsWriteFile(full, JSON.stringify(data, null, 2) + '\n', 'utf-8');
   }
 
   async appendLine(path: string, line: string): Promise<void> {
@@ -49,7 +56,7 @@ export class NodeFileSystemAdapter implements FileSystemAdapter {
 
   async readLines(path: string): Promise<string[]> {
     try {
-      const raw = await readFile(this.resolve(path), 'utf-8');
+      const raw = await fsReadFile(this.resolve(path), 'utf-8');
       return raw.split('\n').filter((line) => line.length > 0);
     } catch (err) {
       if (isNotFound(err)) return [];
@@ -79,5 +86,20 @@ export class NodeFileSystemAdapter implements FileSystemAdapter {
       if (isNotFound(err)) return [];
       throw err;
     }
+  }
+
+  async readFile(path: string): Promise<string | null> {
+    try {
+      return await fsReadFile(this.resolve(path), 'utf-8');
+    } catch (err) {
+      if (isNotFound(err)) return null;
+      throw err;
+    }
+  }
+
+  async writeFile(path: string, content: string): Promise<void> {
+    const full = this.resolve(path);
+    await this.ensureDir(full);
+    await fsWriteFile(full, content, 'utf-8');
   }
 }

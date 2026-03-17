@@ -21,4 +21,8 @@ export interface FileSystemAdapter {
   exists(path: string): Promise<boolean>;
   /** 列出指定目录下的子目录名 */
   listDirs(path: string): Promise<string[]>;
+  /** 读取文本文件，文件不存在返回 null */
+  readFile(path: string): Promise<string | null>;
+  /** 写入文本文件（覆盖） */
+  writeFile(path: string, content: string): Promise<void>;
 }

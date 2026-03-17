@@ -25,8 +25,8 @@ export interface IngestResult {
 export interface AfterTurnResult {
   /** L1 核心档案是否有更新 */
   coreUpdated: boolean;
-  /** L2 摘要是否有更新 */
-  summaryUpdated: boolean;
+  /** memory.md 是否有更新 */
+  memoryUpdated: boolean;
   /** L3 原始记录是否追加成功 */
   recordAppended: boolean;
 }
@@ -38,23 +38,23 @@ export interface AfterTurnResult {
  * 所有钩子有默认实现，开发者可选择性覆盖。失败不阻塞对话。
  */
 export interface LifecycleHooks {
-  /** 进入 Session 时：读 L1 + L2，按继承策略组装上下文 */
+  /** 进入 Session 时：读 L1 + memory.md，按继承策略组装上下文 */
   bootstrap?(sessionId: string): Promise<BootstrapResult>;
   /** 每条消息进来时：意图识别，匹配 Skill */
   ingest?(sessionId: string, message: TurnRecord): Promise<IngestResult>;
-  /** 组装 prompt：按继承策略筛选 L2 注入 */
+  /** 组装 prompt：按继承策略筛选 memory.md 注入，注入当前 Session 的 scope.md */
   assemble?(sessionId: string): Promise<AssembledContext>;
-  /** 每轮结束：提取写 L1 + 提炼 L2 + 追加 L3 */
+  /** 每轮结束：提取写 L1 + 更新 memory.md + 追加 records.jsonl + 触发父 index.md 更新 */
   afterTurn?(
     sessionId: string,
     userMsg: TurnRecord,
     assistantMsg: TurnRecord,
   ): Promise<AfterTurnResult>;
-  /** context 接近上限时：压缩旧内容存入 L2（v0.1 只留接口） */
+  /** context 接近上限时：压缩旧内容存入 memory.md（v0.1 只留接口） */
   compact?(sessionId: string): Promise<void>;
-  /** 切换 Session：旧 Session 更新 L2 → 新 Session bootstrap */
+  /** 切换 Session：旧 Session 更新 memory.md → 新 Session bootstrap */
   onSessionSwitch?(fromId: string, toId: string): Promise<BootstrapResult>;
-  /** 创建子 Session 前：创建文件夹 + meta.json + 组装初始上下文 */
+  /** 创建子 Session 前：创建文件夹 + meta.json + 空 memory.md + 生成 scope.md + 更新父 index.md */
   prepareChildSpawn?(options: CreateSessionOptions): Promise<SessionMeta>;
 }
 

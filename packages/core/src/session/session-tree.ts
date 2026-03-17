@@ -42,6 +42,10 @@ export class SessionTreeImpl implements SessionTree {
       lastActiveAt: ts,
     };
     await this.fs.writeJSON(metaPath(meta.id), meta);
+    // 初始化三个 .md 内容文件
+    await this.fs.writeFile(`sessions/${meta.id}/memory.md`, '');
+    await this.fs.writeFile(`sessions/${meta.id}/scope.md`, '');
+    await this.fs.writeFile(`sessions/${meta.id}/index.md`, '');
     // 初始化 core.json（如果不存在）
     const existing = await this.fs.readJSON('core.json');
     if (existing === null) {
@@ -72,6 +76,10 @@ export class SessionTreeImpl implements SessionTree {
     };
     // 写子 Session meta.json
     await this.fs.writeJSON(metaPath(meta.id), meta);
+    // 初始化三个 .md 内容文件
+    await this.fs.writeFile(`sessions/${meta.id}/memory.md`, '');
+    await this.fs.writeFile(`sessions/${meta.id}/scope.md`, '');
+    await this.fs.writeFile(`sessions/${meta.id}/index.md`, '');
     // 更新父的 children 列表
     parent.children.push(meta.id);
     parent.updatedAt = now();

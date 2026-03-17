@@ -27,27 +27,6 @@ export interface CoreSchemaField {
 export type CoreSchema = Record<string, CoreSchemaField>;
 
 /**
- * L2 Session 摘要
- *
- * 每个 Session 一份，afterTurn 自动提炼更新。
- * 包含关键结论、用户意图、待跟进事项。
- */
-export interface SessionSummary {
-  /** 所属 Session ID */
-  sessionId: string;
-  /** 关键结论 */
-  conclusions: string[];
-  /** 用户意图 */
-  intents: string[];
-  /** 待跟进事项 */
-  pendingItems: string[];
-  /** 最后更新时间（ISO 8601） */
-  updatedAt: string;
-  /** 过期天数，超过后不主动注入（默认 90） */
-  ttl?: number;
-}
-
-/**
  * L3 单条对话记录
  *
  * JSONL 格式存储，每行一条 turn。
@@ -71,26 +50,37 @@ export interface TurnRecord {
 export interface AssembledContext {
   /** L1 核心档案 */
   core: Record<string, unknown>;
-  /** 按继承策略收集的 L2 摘要列表 */
-  summaries: SessionSummary[];
-  /** 当前 Session 的 L2 摘要 */
-  currentSummary: SessionSummary | null;
+  /** 按继承策略收集的 memory.md 内容列表 */
+  memories: string[];
+  /** 当前 Session 的 memory.md 内容 */
+  currentMemory: string | null;
+  /** 当前 Session 的 scope.md 内容 */
+  scope: string | null;
 }
 
 /**
  * 记忆系统接口
  *
  * 管理三层记忆的读写，以及按继承策略组装上下文。
+ * L2 内容文件使用 markdown 格式（LLM 天然理解，用户可直接阅读）。
  */
 export interface MemoryEngine {
   /** 读取 L1 核心档案（支持点路径，如 'profile.gpa'） */
   readCore(path?: string): Promise<unknown>;
   /** 写入 L1 核心档案的某个字段 */
   writeCore(path: string, value: unknown): Promise<void>;
-  /** 读取某 Session 的 L2 摘要 */
-  readSummary(sessionId: string): Promise<SessionSummary | null>;
-  /** 写入某 Session 的 L2 摘要 */
-  writeSummary(sessionId: string, summary: SessionSummary): Promise<void>;
+  /** 读取某 Session 的 memory.md（记忆摘要） */
+  readMemory(sessionId: string): Promise<string | null>;
+  /** 写入某 Session 的 memory.md */
+  writeMemory(sessionId: string, content: string): Promise<void>;
+  /** 读取某 Session 的 scope.md（对话边界） */
+  readScope(sessionId: string): Promise<string | null>;
+  /** 写入某 Session 的 scope.md */
+  writeScope(sessionId: string, content: string): Promise<void>;
+  /** 读取某 Session 的 index.md（子节点目录） */
+  readIndex(sessionId: string): Promise<string | null>;
+  /** 写入某 Session 的 index.md */
+  writeIndex(sessionId: string, content: string): Promise<void>;
   /** 追加一条 L3 对话记录 */
   appendRecord(sessionId: string, record: TurnRecord): Promise<void>;
   /** 读取某 Session 的所有 L3 对话记录 */

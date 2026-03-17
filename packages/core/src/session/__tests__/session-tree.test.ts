@@ -31,6 +31,14 @@ describe('SessionTreeImpl', () => {
     expect(core).toEqual({});
   });
 
+  it('createRoot 后 memory.md / scope.md / index.md 存在', async () => {
+    const fs = new NodeFileSystemAdapter(tmpDir);
+    const root = await tree.createRoot();
+    expect(await fs.exists(`sessions/${root.id}/memory.md`)).toBe(true);
+    expect(await fs.exists(`sessions/${root.id}/scope.md`)).toBe(true);
+    expect(await fs.exists(`sessions/${root.id}/index.md`)).toBe(true);
+  });
+
   it('createChild 创建子 Session', async () => {
     const root = await tree.createRoot();
     const child = await tree.createChild({ parentId: root.id, label: '子节点' });
@@ -40,6 +48,15 @@ describe('SessionTreeImpl', () => {
     // 父的 children 已更新
     const updatedRoot = await tree.get(root.id);
     expect(updatedRoot?.children).toContain(child.id);
+  });
+
+  it('createChild 后 memory.md / scope.md / index.md 存在', async () => {
+    const fs = new NodeFileSystemAdapter(tmpDir);
+    const root = await tree.createRoot();
+    const child = await tree.createChild({ parentId: root.id, label: '子' });
+    expect(await fs.exists(`sessions/${child.id}/memory.md`)).toBe(true);
+    expect(await fs.exists(`sessions/${child.id}/scope.md`)).toBe(true);
+    expect(await fs.exists(`sessions/${child.id}/index.md`)).toBe(true);
   });
 
   it('createChild 父不存在抛错', async () => {

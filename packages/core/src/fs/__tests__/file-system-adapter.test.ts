@@ -73,4 +73,15 @@ describe('NodeFileSystemAdapter', () => {
     const dirs = await adapter.listDirs('not-exist');
     expect(dirs).toEqual([]);
   });
+
+  it('writeFile + readFile 正常读写文本', async () => {
+    await adapter.writeFile('note.md', '# Hello\n这是测试');
+    const content = await adapter.readFile('note.md');
+    expect(content).toBe('# Hello\n这是测试');
+  });
+
+  it('readFile 文件不存在返回 null', async () => {
+    const content = await adapter.readFile('not-exist.md');
+    expect(content).toBeNull();
+  });
 });

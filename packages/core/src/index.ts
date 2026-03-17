@@ -12,7 +12,6 @@ export type {
   InheritancePolicy,
   CoreSchemaField,
   CoreSchema,
-  SessionSummary,
   TurnRecord,
   AssembledContext,
   MemoryEngine,
