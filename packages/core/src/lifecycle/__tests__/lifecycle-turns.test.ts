@@ -11,8 +11,8 @@ import type { CoreSchema, TurnRecord } from '../../types/memory';
 import type { StelloConfig, StelloError } from '../../types/engine';
 
 const testSchema: CoreSchema = {
-  name: { type: 'string', default: '' },
-  gpa: { type: 'number', default: 0 },
+  name: { type: 'string', default: '', bubbleable: true },
+  gpa: { type: 'number', default: 0, bubbleable: true },
 };
 
 /** 根据 prompt 内容返回不同结果的 mock callLLM */
@@ -82,6 +82,7 @@ describe('LifecycleManager — afterTurn & onSessionSwitch & prepareChildSpawn',
 
   it('afterTurn 检测 L1 变更', async () => {
     await lm.afterTurn(childId, userMsg, assistantMsg);
+    await lm.flushBubbles();
     const name = await coreMem.readCore('name');
     expect(name).toBe('测试');
   });

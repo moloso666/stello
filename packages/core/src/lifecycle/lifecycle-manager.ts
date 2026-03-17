@@ -7,6 +7,7 @@ import type { BootstrapResult, AfterTurnResult } from '../types/lifecycle';
 import type { CoreMemory } from '../memory/core-memory';
 import type { SessionMemory } from '../memory/session-memory';
 import type { SessionTreeImpl } from '../session/session-tree';
+import { BubbleManager } from '../memory/bubble';
 
 /** LLM 返回的 L1 变更格式 */
 interface CoreUpdate {
@@ -23,6 +24,7 @@ interface CoreUpdate {
 export class LifecycleManager {
   private readonly callLLM: (prompt: string) => Promise<string>;
   private readonly inheritancePolicy: InheritancePolicy;
+  private readonly bubbleManager: BubbleManager;
   private errorHandlers = new Set<(e: StelloError) => void>();
 
   constructor(
@@ -33,6 +35,11 @@ export class LifecycleManager {
   ) {
     this.callLLM = config.callLLM;
     this.inheritancePolicy = config.inheritancePolicy ?? 'summary';
+    this.bubbleManager = new BubbleManager(
+      coreMemory,
+      config.coreSchema,
+      config.bubblePolicy?.debounceMs ?? 500,
+    );
   }
 
   /** 进入 Session 时组装上下文 */
@@ -89,7 +96,7 @@ export class LifecycleManager {
       const response = await this.callLLM(prompt);
       const { updates } = JSON.parse(response) as { updates: CoreUpdate[] };
       for (const u of updates) {
-        await this.coreMemory.writeCore(u.path, u.value);
+        this.bubbleManager.handleBubble(u.path, u.value);
       }
       result.coreUpdated = updates.length > 0;
     } catch (err) {
@@ -135,6 +142,11 @@ export class LifecycleManager {
       this.emitError('prepareChildSpawn', err);
     }
     return child;
+  }
+
+  /** 立即执行所有待处理的冒泡写入 */
+  async flushBubbles(): Promise<void> {
+    await this.bubbleManager.flush();
   }
 
   /** 注册错误监听 */

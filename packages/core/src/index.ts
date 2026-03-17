@@ -50,3 +50,4 @@ export { SessionTreeImpl } from './session';
 export { CoreMemory } from './memory/core-memory';
 export { SessionMemory } from './memory/session-memory';
 export { LifecycleManager } from './lifecycle/lifecycle-manager';
+export { BubbleManager } from './memory/bubble';
