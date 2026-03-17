@@ -255,19 +255,70 @@ sessions/{uuid}/
 
 ---
 
+## Phase 3（进行中）：记忆系统
+
+### 3.1 L1 核心档案 CoreMemory
+
+**时间**：2026-03-17
+**Commit**：`3dea1bb`
+**测试**：40 个（fs 11 + session 17 + core-memory 12）
+
+**文件**：`memory/core-memory.ts`（`CoreMemory` 类）
+
+CoreMemory 管理全局 `core.json`（L1 核心档案），是记忆系统三层中的第一层。开发者通过 `CoreSchema` 定义字段结构，CoreMemory 负责校验和持久化。
+
+**核心能力**：
+
+| 能力 | 实现方式 |
+|------|----------|
+| 点路径读写 | `getByPath` / `setByPath` 工具函数，支持 `'profile.gpa'` 嵌套访问 |
+| Schema 类型校验 | 顶层写入时校验值类型匹配（string/number/boolean/array/object） |
+| onChange 事件 | 写入后 emit `CoreChangeEvent { path, oldValue, newValue }` |
+| requireConfirm 确认流程 | schema 标记 `requireConfirm` 的字段 → emit `UpdateProposal` 而不写入 |
+| confirmWrite | 供 ConfirmProtocol 确认后调用，跳过确认检查直接写入 |
+| 初始化默认值 | `core.json` 不存在时按 schema 的 `default` 字段生成 |
+
+**方法清单**：
+
+| 方法 | 功能 |
+|------|------|
+| `init()` | 加载或创建 core.json |
+| `readCore(path?)` | 读取，无 path 返回整个对象，有 path 走点路径 |
+| `writeCore(path, value)` | 写入，校验 schema + requireConfirm 检查 |
+| `confirmWrite(path, value)` | 确认写入，跳过 requireConfirm |
+| `on(event, handler)` | 注册事件监听 |
+| `off(event, handler)` | 取消事件监听 |
+
+**事件系统**：自建 typed emitter（`Map<string, Set<handler>>`），不依赖 Node.js EventEmitter，保持可移植性。复用 `CoreChangeEvent`（engine.ts）和 `UpdateProposal`（lifecycle.ts）类型。
+
+**Schema 校验规则**：
+- 顶层写入（如 `writeCore('gpa', 3.5)`）：校验值类型匹配 schema 定义
+- 嵌套写入（如 `writeCore('profile.gpa', 3.5)`）：只校验顶层 key 存在于 schema
+- 不存在的字段：直接抛错
+
+**测试覆盖（12 个）**：
+- init 默认值创建 / 加载已有数据
+- readCore 完整对象 / 点路径 / 不存在路径
+- writeCore 写入持久化 / 点路径嵌套 / 类型校验拒绝 / 不存在字段拒绝
+- onChange 事件触发验证
+- requireConfirm 触发 proposal + 数据不变
+- confirmWrite 写入 + change 事件
+
+---
+
 ## 当前代码统计
 
 | 指标 | 数量 |
 |------|------|
 | 类型接口文件 | 5 个（types/ 目录） |
-| 实现文件 | 2 个（file-system-adapter.ts, session-tree.ts） |
-| 测试文件 | 2 个 |
-| 测试用例 | 28 个（全部通过） |
+| 实现文件 | 3 个（file-system-adapter.ts, session-tree.ts, core-memory.ts） |
+| 测试文件 | 3 个 |
+| 测试用例 | 40 个（全部通过） |
 | 导出类型 | 25 个 |
-| 导出实现 | 2 个（NodeFileSystemAdapter, SessionTreeImpl） |
+| 导出实现 | 3 个（NodeFileSystemAdapter, SessionTreeImpl, CoreMemory） |
 
 ---
 
-## 下一步：Phase 3 — 记忆系统
+## 下一步：Phase 3 继续 — L2 memory.md + L3 records.jsonl
 
-实现 `MemoryEngine` 接口：L1 core.json 读写 + L2 memory.md 读写 + L3 records.jsonl 追加/检索 + 按继承策略组装上下文。
+实现 MemoryEngine 剩余部分：L2 markdown 文件读写 + L3 JSONL 追加/检索 + 按继承策略组装上下文。
