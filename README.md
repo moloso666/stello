@@ -1,3 +1,7 @@
+<p align="right">
+  <strong>English</strong> | <a href="./README.zh-CN.md">中文</a>
+</p>
+
 <p align="center">
   <h1 align="center">Stello</h1>
   <p align="center">
