@@ -253,9 +253,8 @@ stello-data/
 - [x] 拆分策略 + 确认协议（SplitGuard + ConfirmManager）`066bdbc`
 - [x] Skill 插槽 + Agent Tools（SkillRouterImpl + AgentTools）`8b9dd7e`
 - [x] 生命周期完整串联 + 集成测试（9 个用例覆盖完整生命周期）
-- [ ] **星空图布局 + Canvas 渲染 + 交互** ← **当前**
-- [ ] StelloGraph React 组件
-- [ ] 终端 demo
+- [x] 星空图布局 + Canvas 渲染 + 交互 + StelloGraph React 组件
+- [ ] **终端 demo** ← **当前**
 - [ ] README + Quickstart
 - [ ] npm 发布 0.1.0
 
@@ -273,6 +272,7 @@ stello-data/
 - `066bdbc` feat(confirm): 实现确认协议 + 拆分保护机制 — 11 个测试，累计 82 个
 - `8b9dd7e` feat(skill+tools): 实现 Skill 插槽 + Agent Tools — 16 个测试，累计 98 个
 - `724cea0` test(integration): 端到端集成测试 — 9 个用例覆盖完整生命周期，累计 107 个
+- `9a170fe` feat(visualizer): 实现星空图可视化 — 布局 + Canvas 渲染 + 交互 + StelloGraph 组件，27 个测试
 
 ## 设计决策记录
 

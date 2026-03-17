@@ -565,19 +565,60 @@ SplitGuard 检查 Session 是否满足拆分条件，防止过早或过于频繁
 
 ---
 
+## Phase 8：星空图可视化 @stello-ai/visualizer
+
+**时间**：2026-03-17
+**测试**：27 个（layout 13 + renderer 6 + interaction 8）
+
+### 8.1 概述
+
+实现 `@stello-ai/visualizer` 包：星图布局算法 + Canvas 渲染 + 交互处理 + React 组件。独立于 `@stello-ai/core`，通过 TypeScript 鸭子类型实现兼容。
+
+### 8.2 文件清单
+
+| 文件 | 说明 |
+|------|------|
+| `src/types.ts` | SessionData / LayoutNode / LayoutConfig / ViewTransform / RenderConfig / StelloGraphProps |
+| `src/utils/math.ts` | lerp / clamp / distance / screenToCanvas / msAgo / applyBrightness |
+| `src/layout/constellation.ts` | 星图布局算法（纯函数）|
+| `src/renderer/canvas-renderer.ts` | Canvas 渲染器（renderFrame）|
+| `src/interaction/interaction-handler.ts` | 缩放 / 平移 / 点击 / 悬浮交互 |
+| `src/components/Tooltip.tsx` | DOM 悬浮提示组件 |
+| `src/components/StelloGraph.tsx` | React 主组件 |
+| `src/index.ts` | 统一导出 |
+
+### 8.3 核心设计
+
+**布局算法**：根节点居中，子节点按 depth 向外扩展为同心环。黄金角偏移使同层节点分布更自然。turnCount → size，lastActiveAt → brightness，archived → 低透明度。
+
+**渲染器**：清空画布 → 应用 transform → 父子实线 → refs 虚线 → 节点圆 → 标签。brightness 通过 RGB 亮度混合实现。
+
+**交互**：wheel 缩放（以鼠标为中心）、拖拽平移、小位移点击触发 onNodeClick、mousemove 命中检测触发 onNodeHover/onNodeLeave。
+
+**React 组件**：ResizeObserver 响应式 + DPI/Retina 处理 + rAF 防抖渲染。
+
+### 8.4 测试覆盖
+
+- **布局（13）**：空数组、根节点中心、环距、turnCount/brightness 映射、归档透明度、colorFn、同层角度不重叠
+- **渲染（6）**：空节点、arc+fill 调用、实线/虚线连线、transform 应用、标签开关
+- **交互（8）**：attach/detach、wheel 缩放、拖拽平移、点击命中、悬浮进入/离开、detach 不响应、resetTransform
+
+---
+
 ## 当前代码统计
 
 | 指标 | 数量 |
 |------|------|
-| 类型接口文件 | 5 个（types/ 目录） |
-| 实现文件 | 11 个 |
-| 测试文件 | 13 个（+2 集成测试） |
-| 测试用例 | 107 个（全部通过） |
-| 导出类型 | 26 个 |
-| 导出实现 | 10 个 |
+| @stello-ai/core 实现文件 | 11 个 |
+| @stello-ai/core 测试文件 | 13 个 |
+| @stello-ai/core 测试用例 | 107 个 |
+| @stello-ai/visualizer 实现文件 | 8 个 |
+| @stello-ai/visualizer 测试文件 | 3 个 |
+| @stello-ai/visualizer 测试用例 | 27 个 |
+| **总测试用例** | **134 个（全部通过）** |
 
 ---
 
-## 下一步：Phase 8 — 星空图布局 + Canvas 渲染 + 交互
+## 下一步：终端 demo + README + 发布
 
-进入 `@stello-ai/visualizer` 包，实现星空图可视化。
+终端 demo 验证完整工作流，编写 README 和 Quickstart，发布 npm 0.1.0。
