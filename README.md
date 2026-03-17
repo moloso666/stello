@@ -5,6 +5,10 @@
 <a id="english"></a>
 
 <p align="center">
+  <img src="./assets/logo.png" alt="Stello Logo" width="200" />
+</p>
+
+<p align="center">
   <h1 align="center">Stello</h1>
   <p align="center">
     <strong>The first open-source conversation topology engine.</strong><br/>
@@ -288,10 +292,20 @@ pnpm typecheck   # TypeScript strict mode
   <a href="#english">English</a> | <a href="#中文">中文</a>
 </p>
 
+<p align="center">
+  <img src="./assets/logo.png" alt="Stello Logo" width="200" />
+</p>
+
 <h1 align="center">Stello</h1>
 <p align="center">
   <strong>首个开源对话拓扑引擎。</strong><br/>
   自动分支会话树、跨分支继承记忆、星空图可视化。
+</p>
+
+<p align="center">
+  <a href="https://github.com/stello-agent/stello/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue" alt="License" /></a>
+  <a href="https://www.npmjs.com/package/@stello-ai/core"><img src="https://img.shields.io/npm/v/@stello-ai/core" alt="npm" /></a>
+  <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-strict-blue" alt="TypeScript" /></a>
 </p>
 
 ---
