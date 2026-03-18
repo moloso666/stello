@@ -292,24 +292,19 @@ pnpm typecheck   # TypeScript strict mode
 
 ## Examples
 
-The [`examples/`](./examples/) directory contains working demos:
+See the [stello-examples](https://github.com/stello-agent/stello-examples) repository for working demos:
 
-| Example | Description |
-|---------|-------------|
-| `examples/demo/src/basic.ts` | Minimal setup — create root session, run afterTurn |
-| `examples/demo/src/conversation.ts` | Multi-turn conversation with memory updates |
-| `examples/demo/src/branching.ts` | Session branching and memory inheritance |
-| `examples/demo/src/cross-reference.ts` | Cross-branch references between sessions |
-| `examples/demo/src/agent-tools.ts` | All 8 agent tools in action |
-| `examples/demo/src/full-flow.ts` | Complete lifecycle with visualization export |
-| `examples/visualizer-test/` | Interactive star-map visualization (Vite + React) |
+- **basic** — Minimal setup (create root session, run afterTurn)
+- **conversation** — Multi-turn conversation with memory updates
+- **branching** — Session branching and memory inheritance
+- **cross-reference** — Cross-branch references between sessions
+- **agent-tools** — All 8 agent tools in action
+- **full-flow** — Complete lifecycle with visualization export
+- **visualizer-test** — Interactive star-map visualization (Vite + React)
 
 ```bash
-# Run a demo
-cd examples/demo && pnpm dev
-
-# Run the interactive visualizer
-cd examples/visualizer-test && pnpm dev
+git clone https://github.com/stello-agent/stello-examples.git
+cd stello-examples/demo && pnpm install && pnpm dev
 ```
 
 ## License
@@ -610,24 +605,19 @@ pnpm typecheck   # TypeScript 严格模式
 
 ## 示例
 
-[`examples/`](./examples/) 目录包含可运行的完整示例：
+完整示例请查看 [stello-examples](https://github.com/stello-agent/stello-examples) 仓库：
 
-| 示例 | 说明 |
-|------|------|
-| `examples/demo/src/basic.ts` | 最小启动 — 创建根 Session，执行 afterTurn |
-| `examples/demo/src/conversation.ts` | 多轮对话 + 记忆更新 |
-| `examples/demo/src/branching.ts` | Session 分支 + 记忆继承 |
-| `examples/demo/src/cross-reference.ts` | 跨分支引用 |
-| `examples/demo/src/agent-tools.ts` | 8 个 Agent Tool 全部演示 |
-| `examples/demo/src/full-flow.ts` | 完整生命周期 + 可视化导出 |
-| `examples/visualizer-test/` | 交互式星空图（Vite + React） |
+- **basic** — 最小启动（创建根 Session，执行 afterTurn）
+- **conversation** — 多轮对话 + 记忆更新
+- **branching** — Session 分支 + 记忆继承
+- **cross-reference** — 跨分支引用
+- **agent-tools** — 8 个 Agent Tool 全部演示
+- **full-flow** — 完整生命周期 + 可视化导出
+- **visualizer-test** — 交互式星空图（Vite + React）
 
 ```bash
-# 运行 demo
-cd examples/demo && pnpm dev
-
-# 运行交互式可视化
-cd examples/visualizer-test && pnpm dev
+git clone https://github.com/stello-agent/stello-examples.git
+cd stello-examples/demo && pnpm install && pnpm dev
 ```
 
 ## 许可证

@@ -48,9 +48,6 @@ stello/
 │           ├── renderer/           ← Canvas 渲染（渐变背景 + 节点发光）
 │           ├── interaction/        ← 缩放/平移/点击/节点拖拽
 │           └── components/         ← StelloGraph + ChatPanel + FilePanel + Tooltip
-├── examples/
-│   ├── demo/                       ← 6 个功能演示脚本
-│   └── visualizer-test/            ← 可视化交互测试（Vite + React）
 ├── scripts/
 │   └── smoke-test.ts               ← 冒烟测试脚本
 ├── assets/
@@ -268,8 +265,9 @@ stello-data/
 - [x] Visualizer 升级：侧边栏面板 + 节点拖拽 + Liquid Glass 视觉风格 `143bebb`
 - [x] 终端 demo（6 个完成：basic, conversation, branching, cross-reference, agent-tools, full-flow）
 - [x] 可视化交互测试（examples/visualizer-test）
-- [ ] **仓库整理 + README 更新** ← **当前**
-- [ ] npm 发布 0.1.0
+- [x] 仓库整理 + README/CLAUDE.md 更新 `023d94c`
+- [x] npm 发布 0.1.1 `0e48017`
+- [x] 分离 examples 到独立仓库 `stello-agent/stello-examples`
 
 ## 最近改动日志
 
@@ -291,6 +289,8 @@ stello-data/
 - `b14b1b0` chore(scripts): 添加 smoke-test 联调脚本
 - `143bebb` feat(visualizer): 面板 + 拖拽 + Liquid Glass 视觉升级 — 36 个测试
 - `c0cde98` chore(repo): 整理仓库 — 提交 examples + assets + 更新 gitignore
+- `023d94c` docs: 更新 README + CLAUDE.md
+- `0e48017` chore(release): v0.1.1 — 发布 @stello-ai/core + @stello-ai/visualizer
 
 ## 设计决策记录
 
