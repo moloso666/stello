@@ -1,6 +1,6 @@
 {
   "name": "@stello-ai/visualizer",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Star-map visualization for Stello conversation topology",
   "license": "Apache-2.0",
   "author": "Stello Contributors",

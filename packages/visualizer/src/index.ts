@@ -1,5 +1,5 @@
 /** Stello Visualizer 版本号 */
-export const VERSION = '0.1.0';
+export const VERSION = '0.1.1';
 
 // 类型导出
 export type {
