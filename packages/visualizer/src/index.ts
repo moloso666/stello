@@ -10,7 +10,12 @@ export type {
   ViewTransform,
   RenderConfig,
   StelloGraphProps,
+  ChatMessage,
+  SessionFiles,
 } from './types';
+
+// 样式常量
+export { theme } from './styles/theme';
 
 // 布局算法（纯函数，可独立使用）
 export { computeConstellationLayout } from './layout/constellation';
@@ -26,3 +31,7 @@ export { InteractionHandler } from './interaction/interaction-handler';
 export { StelloGraph } from './components/StelloGraph';
 export { Tooltip } from './components/Tooltip';
 export type { TooltipProps } from './components/Tooltip';
+export { ChatPanel } from './components/ChatPanel';
+export type { ChatPanelProps } from './components/ChatPanel';
+export { FilePanel } from './components/FilePanel';
+export type { FilePanelProps } from './components/FilePanel';

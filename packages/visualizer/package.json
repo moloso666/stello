@@ -11,7 +11,17 @@
   },
   "homepage": "https://github.com/stello-agent/stello#readme",
   "bugs": "https://github.com/stello-agent/stello/issues",
-  "keywords": ["ai", "agent", "visualization", "star-map", "constellation", "canvas", "react", "session", "topology"],
+  "keywords": [
+    "ai",
+    "agent",
+    "visualization",
+    "star-map",
+    "constellation",
+    "canvas",
+    "react",
+    "session",
+    "topology"
+  ],
   "sideEffects": false,
   "type": "module",
   "main": "./dist/index.cjs",
@@ -43,6 +53,8 @@
     "react-dom": "^18.0.0 || ^19.0.0"
   },
   "devDependencies": {
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "jsdom": "^29.0.0",

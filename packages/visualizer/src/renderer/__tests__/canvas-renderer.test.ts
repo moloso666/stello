@@ -6,6 +6,7 @@ import type { LayoutNode, ViewTransform } from '../../types';
 
 /** 创建 mock CanvasRenderingContext2D */
 function createMockCtx(): CanvasRenderingContext2D {
+  const gradientMock = { addColorStop: vi.fn() };
   const ctx: Record<string, unknown> = {
     canvas: { width: 800, height: 600 },
     save: vi.fn(),
@@ -22,12 +23,15 @@ function createMockCtx(): CanvasRenderingContext2D {
     fill: vi.fn(),
     fillText: vi.fn(),
     setLineDash: vi.fn(),
+    createLinearGradient: vi.fn(() => gradientMock),
     fillStyle: '',
     strokeStyle: '',
     lineWidth: 1,
     globalAlpha: 1,
     font: '',
     textAlign: '',
+    shadowColor: '',
+    shadowBlur: 0,
   };
   return ctx as unknown as CanvasRenderingContext2D;
 }

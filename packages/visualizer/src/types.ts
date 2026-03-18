@@ -96,6 +96,26 @@ export interface RenderConfig {
   labelColor?: string;
   /** 背景色 */
   backgroundColor?: string;
+  /** 背景渐变色对（覆盖 backgroundColor） */
+  backgroundGradient?: [string, string];
+  /** 节点发光模糊半径（默认 8） */
+  nodeGlowBlur?: number;
+  /** 高亮节点发光模糊半径（默认 20） */
+  highlightGlowBlur?: number;
+}
+
+/** 对话消息 */
+export interface ChatMessage {
+  role: string;
+  content: string;
+  timestamp: string;
+}
+
+/** Session 文件内容 */
+export interface SessionFiles {
+  memory?: string;
+  scope?: string;
+  index?: string;
 }
 
 /**
@@ -108,6 +128,14 @@ export interface StelloGraphProps {
   onSessionClick?: (sessionId: string) => void;
   /** 记忆摘要映射（用于 tooltip 展示） */
   memories?: Map<string, string>;
+  /** 对话消息映射（sessionId → 消息列表） */
+  messages?: Map<string, ChatMessage[]>;
+  /** 获取 Session 文件内容 */
+  sessionFiles?: (sessionId: string) => SessionFiles | null;
+  /** 发送消息回调 */
+  onSendMessage?: (sessionId: string, text: string) => void;
+  /** 侧边栏宽度（默认 360） */
+  sidebarWidth?: number;
   /** 布局配置 */
   layoutConfig?: Partial<LayoutConfig>;
   /** 渲染配置 */
