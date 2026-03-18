@@ -71,6 +71,12 @@ export class AgentTools {
   /** 创建子 Session（受拆分保护约束） */
   private async createSession(args: Record<string, unknown>): Promise<ToolExecutionResult> {
     const parentId = args.parentId as string;
+    if (!parentId) {
+      return {
+        success: false,
+        error: '缺少 parentId 参数。用法：stello_create_session({ parentId: "父Session ID", label: "子话题名称" })',
+      };
+    }
     const check = await this.splitGuard.checkCanSplit(parentId);
     if (!check.canSplit) {
       return { success: false, error: check.reason };

@@ -103,14 +103,17 @@ export class LifecycleManager {
       this.emitError('afterTurn.l1', err);
     }
 
-    // 更新父 index.md
+    // 递增 turnCount + 更新父 index.md
     try {
       const session = await this.sessions.get(sessionId);
-      if (session?.parentId) {
-        await this.updateParentIndex(session.parentId);
+      if (session) {
+        await this.sessions.updateMeta(sessionId, { turnCount: session.turnCount + 1 });
+        if (session.parentId) {
+          await this.updateParentIndex(session.parentId);
+        }
       }
     } catch (err) {
-      this.emitError('afterTurn.index', err);
+      this.emitError('afterTurn.turnCount', err);
     }
 
     return result;

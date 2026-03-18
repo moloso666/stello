@@ -62,6 +62,21 @@ describe('SplitGuard — 拆分保护机制', () => {
     expect(result.reason).toContain('不存在');
   });
 
+  it('testMode 跳过轮次检查', async () => {
+    const testGuard = new SplitGuard(tree, { minTurns: 3, cooldownTurns: 5, testMode: true });
+    // turnCount 默认 0，远低于 minTurns
+    const result = await testGuard.checkCanSplit(rootId);
+    expect(result.canSplit).toBe(true);
+  });
+
+  it('testMode 跳过冷却期检查', async () => {
+    const testGuard = new SplitGuard(tree, { minTurns: 3, cooldownTurns: 5, testMode: true });
+    await tree.updateMeta(rootId, { turnCount: 5 });
+    testGuard.recordSplit(rootId, 5);
+    const result = await testGuard.checkCanSplit(rootId);
+    expect(result.canSplit).toBe(true);
+  });
+
   it('不同 Session 的冷却期独立', async () => {
     const child = await tree.createChild({ parentId: rootId, label: '子' });
     await tree.updateMeta(rootId, { turnCount: 5 });

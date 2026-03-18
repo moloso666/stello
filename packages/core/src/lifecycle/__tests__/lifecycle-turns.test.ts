@@ -123,6 +123,14 @@ describe('LifecycleManager — afterTurn & onSessionSwitch & prepareChildSpawn',
     vi.restoreAllMocks();
   });
 
+  it('afterTurn 自动递增 turnCount', async () => {
+    const before = await tree.get(rootId);
+    expect(before?.turnCount).toBe(0);
+    await lm.afterTurn(rootId, userMsg, assistantMsg);
+    const after = await tree.get(rootId);
+    expect(after?.turnCount).toBe(1);
+  });
+
   it('onSessionSwitch 更新旧 memory + bootstrap 新 Session', async () => {
     await sessMem.writeMemory(childId, '旧记忆');
     const result = await lm.onSessionSwitch(childId, rootId);

@@ -141,4 +141,11 @@ describe('AgentTools', () => {
     expect(result.success).toBe(false);
     expect(result.error).toContain('未知');
   });
+
+  it('缺少 parentId 返回友好错误', async () => {
+    const result = await tools.executeTool('stello_create_session', { label: '子话题' });
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('缺少 parentId');
+    expect(result.error).toContain('用法');
+  });
 });

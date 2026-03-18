@@ -56,3 +56,9 @@ export { SplitGuard } from './session/split-guard';
 export type { SplitCheckResult } from './session/split-guard';
 export { SkillRouterImpl } from './skill/skill-router';
 export { AgentTools } from './tools/agent-tools';
+
+// 导出辅助函数
+export { toVisualizerFormat } from './utils/export';
+export type { VisualizerNode } from './utils/export';
+export { exportForBrowser } from './utils/export-browser';
+export type { BrowserExport } from './utils/export-browser';

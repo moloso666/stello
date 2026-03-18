@@ -130,4 +130,20 @@ describe('CoreMemory', () => {
     expect(changes).toHaveLength(1);
     expect(changes[0]).toEqual({ path: 'schools', oldValue: [], newValue: ['北大'] });
   });
+
+  // ─── 别名方法 ───
+
+  it('getAll() 返回全部档案', async () => {
+    await core.init();
+    await core.writeCore('name', 'Alice');
+    const all = await core.getAll();
+    expect(all).toEqual({ name: 'Alice', gpa: 0, schools: [], active: true });
+  });
+
+  it('get(path) 读取指定字段', async () => {
+    await core.init();
+    await core.writeCore('gpa', 3.9);
+    const val = await core.get('gpa');
+    expect(val).toBe(3.9);
+  });
 });

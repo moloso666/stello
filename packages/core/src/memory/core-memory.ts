@@ -103,6 +103,16 @@ export class CoreMemory {
     return getByPath(this.data, path);
   }
 
+  /** 读取全部核心档案（readCore 无参数的别名） */
+  async getAll(): Promise<Record<string, unknown>> {
+    return this.readCore() as Promise<Record<string, unknown>>;
+  }
+
+  /** 读取指定路径（readCore 有参数的别名） */
+  async get(path: string): Promise<unknown> {
+    return this.readCore(path);
+  }
+
   /** 写入 L1 核心档案，校验 schema + requireConfirm 检查 */
   async writeCore(path: string, value: unknown): Promise<void> {
     const topKey = path.split('.')[0]!;

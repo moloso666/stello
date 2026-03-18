@@ -18,28 +18,31 @@ export interface SplitCheckResult {
 export class SplitGuard {
   private readonly minTurns: number;
   private readonly cooldownTurns: number;
+  private readonly testMode: boolean;
   private lastSplitTurns = new Map<string, number>();
 
   constructor(
     private readonly sessions: SessionTreeImpl,
-    strategy?: Partial<SplitStrategy>,
+    strategy?: Partial<SplitStrategy> & { testMode?: boolean },
   ) {
     this.minTurns = strategy?.minTurns ?? 3;
     this.cooldownTurns = strategy?.cooldownTurns ?? 5;
+    this.testMode = strategy?.testMode ?? false;
   }
 
   /** 检查指定 Session 是否允许拆分 */
   async checkCanSplit(sessionId: string): Promise<SplitCheckResult> {
+    if (this.testMode) return { canSplit: true };
     const session = await this.sessions.get(sessionId);
-    if (!session) return { canSplit: false, reason: 'Session 不存在' };
+    if (!session) return { canSplit: false, reason: `Session 不存在: ${sessionId}` };
 
     if (session.turnCount < this.minTurns) {
-      return { canSplit: false, reason: `对话轮次不足，至少需要 ${this.minTurns} 轮` };
+      return { canSplit: false, reason: `对话轮次不足，至少需要 ${this.minTurns} 轮（当前 ${session.turnCount} 轮）` };
     }
 
     const lastSplit = this.lastSplitTurns.get(sessionId);
     if (lastSplit !== undefined && session.turnCount - lastSplit < this.cooldownTurns) {
-      return { canSplit: false, reason: `冷却期未满，距上次拆分需间隔 ${this.cooldownTurns} 轮` };
+      return { canSplit: false, reason: `冷却期未满，距上次拆分需间隔 ${this.cooldownTurns} 轮（当前间隔 ${session.turnCount - lastSplit} 轮）` };
     }
 
     return { canSplit: true };
