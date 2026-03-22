@@ -79,6 +79,10 @@ export class InMemoryStorageAdapter implements MainStorage {
     this.insights.set(sessionId, content)
   }
 
+  async clearInsight(sessionId: string): Promise<void> {
+    this.insights.delete(sessionId)
+  }
+
   async getMemory(sessionId: string): Promise<string | null> {
     return this.memories.get(sessionId) ?? null
   }

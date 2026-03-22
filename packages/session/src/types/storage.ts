@@ -34,6 +34,8 @@ export interface SessionStorage {
   getInsight(sessionId: string): Promise<string | null>
   /** 写入 Session 的 insight */
   putInsight(sessionId: string, content: string): Promise<void>
+  /** 清除 Session 的 insight（send 消费后调用） */
+  clearInsight(sessionId: string): Promise<void>
 
   /** 读取 Session 的记忆摘要（子 Session = L2，Main Session = synthesis） */
   getMemory(sessionId: string): Promise<string | null>

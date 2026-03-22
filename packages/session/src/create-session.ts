@@ -38,6 +38,8 @@ function buildSession(
       const insightContent = await storage.getInsight(currentMeta.id)
       if (insightContent) {
         messages.push({ role: 'system', content: insightContent })
+        // 消费 insight：读取后清除，避免重复出现在后续上下文中
+        await storage.clearInsight(currentMeta.id)
       }
 
       const history = await storage.listRecords(currentMeta.id)

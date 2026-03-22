@@ -49,22 +49,25 @@ describe('send() 契约', () => {
     })
     await session.setInsight('用户偏好简洁回答')
 
-    // 第一次 send
+    // 第一次 send — insight 出现在上下文中，之后被消费
     await session.send('问题1')
-    // 第二次 send — 应包含第一轮的 L3 历史
+
+    const firstCall = capturedMessages[0] as Array<{ role: string; content: string }>
+    expect(firstCall[0]).toEqual({ role: 'system', content: '你是助手' })
+    expect(firstCall[1]).toEqual({ role: 'system', content: '用户偏好简洁回答' })
+
+    // 第二次 send — insight 已消费，不再出现
     await session.send('问题2')
 
-    // 验证第二次调用的上下文
     const secondCall = capturedMessages[1] as Array<{ role: string; content: string }>
     expect(secondCall[0]).toEqual({ role: 'system', content: '你是助手' })
-    expect(secondCall[1]).toEqual({ role: 'system', content: '用户偏好简洁回答' })
     // L3 历史：user + assistant from first round
-    expect(secondCall[2]!.role).toBe('user')
-    expect(secondCall[2]!.content).toBe('问题1')
-    expect(secondCall[3]!.role).toBe('assistant')
+    expect(secondCall[1]!.role).toBe('user')
+    expect(secondCall[1]!.content).toBe('问题1')
+    expect(secondCall[2]!.role).toBe('assistant')
     // 当前用户消息
-    expect(secondCall[4]!.role).toBe('user')
-    expect(secondCall[4]!.content).toBe('问题2')
+    expect(secondCall[3]!.role).toBe('user')
+    expect(secondCall[3]!.content).toBe('问题2')
   })
 
   it('send() 返回 toolCalls 时透传', async () => {
