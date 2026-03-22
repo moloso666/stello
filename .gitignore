@@ -142,3 +142,9 @@ vite.config.ts.timestamp-*
 # macOS
 .DS_Store
 
+# local demo data
+tmp/
+
+# demo frontend artifacts
+demo/**/dist/
+demo/**/.vite/

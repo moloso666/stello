@@ -7,11 +7,14 @@
     "test": "pnpm -r run test",
     "typecheck": "pnpm -r run typecheck",
     "smoke": "tsx scripts/smoke-test.ts",
+    "demo:agent": "tsx demo/stello-agent-basic/demo.ts",
+    "demo:chat": "pnpm --dir demo/stello-agent-chat build && tsx demo/stello-agent-chat/server.ts",
     "lint": "eslint .",
     "format": "prettier --write ."
   },
   "devDependencies": {
     "eslint": "^10.0.3",
+    "openai": "^6.32.0",
     "prettier": "^3.8.1",
     "tsx": "^4.21.0",
     "typescript-eslint": "^8.57.1"
