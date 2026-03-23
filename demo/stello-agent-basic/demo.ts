@@ -1,7 +1,5 @@
 import {
-  CoreMemory,
   NodeFileSystemAdapter,
-  SessionMemory,
   SessionTreeImpl,
   SkillRouterImpl,
   createStelloAgent,
@@ -10,8 +8,8 @@ import {
   type EngineToolRuntime,
   type MemoryEngine,
   type SessionTree,
-  type SkillRouter,
   type StelloAgentConfig,
+  type TurnRecord,
 } from '../../packages/core/src/index'
 
 const schema = {
@@ -75,34 +73,70 @@ function createMockSession(id: string) {
   }
 }
 
+/** 简易内存 MemoryEngine，仅用于 demo */
+function createInMemoryMemoryEngine(): MemoryEngine {
+  const core: Record<string, unknown> = {
+    name: schema.name.default,
+    goal: schema.goal.default,
+    topics: schema.topics.default,
+  }
+  const memories = new Map<string, string>()
+  const scopes = new Map<string, string>()
+  const indexes = new Map<string, string>()
+  const records = new Map<string, TurnRecord[]>()
+
+  return {
+    async readCore(path?: string) {
+      if (!path) return { ...core }
+      return core[path]
+    },
+    async writeCore(path: string, value: unknown) {
+      core[path] = value
+    },
+    async readMemory(sessionId: string) {
+      return memories.get(sessionId) ?? null
+    },
+    async writeMemory(sessionId: string, content: string) {
+      memories.set(sessionId, content)
+    },
+    async readScope(sessionId: string) {
+      return scopes.get(sessionId) ?? null
+    },
+    async writeScope(sessionId: string, content: string) {
+      scopes.set(sessionId, content)
+    },
+    async readIndex(sessionId: string) {
+      return indexes.get(sessionId) ?? null
+    },
+    async writeIndex(sessionId: string, content: string) {
+      indexes.set(sessionId, content)
+    },
+    async appendRecord(sessionId: string, record: TurnRecord) {
+      const list = records.get(sessionId) ?? []
+      list.push(record)
+      records.set(sessionId, list)
+    },
+    async readRecords(sessionId: string) {
+      return records.get(sessionId) ?? []
+    },
+    async assembleContext() {
+      return {
+        core: { ...core },
+        memories: [],
+        currentMemory: null,
+        scope: null,
+      }
+    },
+  }
+}
+
 async function main(): Promise<void> {
   section('Prepare Core Dependencies')
 
   const fs = new NodeFileSystemAdapter('./tmp/stello-agent-basic')
   const sessions = new SessionTreeImpl(fs) as unknown as SessionTree
-  const coreMemory = new CoreMemory(fs, schema)
-  const sessionMemory = new SessionMemory(fs)
-  const memory = {
-    readCore: (path?: string) => coreMemory.readCore(path),
-    writeCore: (path: string, value: unknown) => coreMemory.writeCore(path, value),
-    readMemory: (sessionId: string) => sessionMemory.readMemory(sessionId),
-    writeMemory: (sessionId: string, content: string) => sessionMemory.writeMemory(sessionId, content),
-    readScope: (sessionId: string) => sessionMemory.readScope(sessionId),
-    writeScope: (sessionId: string, content: string) => sessionMemory.writeScope(sessionId, content),
-    readIndex: (sessionId: string) => sessionMemory.readIndex(sessionId),
-    writeIndex: (sessionId: string, content: string) => sessionMemory.writeIndex(sessionId, content),
-    appendRecord: (sessionId: string, record: { role: 'user' | 'assistant'; content: string; timestamp: string }) =>
-      sessionMemory.appendRecord(sessionId, record),
-    readRecords: (sessionId: string) => sessionMemory.readRecords(sessionId),
-    assembleContext: async () => ({
-      core: await coreMemory.readCore() as Record<string, unknown>,
-      memories: [],
-      currentMemory: null,
-      scope: null,
-    }),
-  } as unknown as MemoryEngine
+  const memory = createInMemoryMemoryEngine()
 
-  await coreMemory.init()
   const root = await (sessions as SessionTreeImpl).createRoot('Main Session')
   print('root session', root)
 
@@ -112,21 +146,11 @@ async function main(): Promise<void> {
   mockSessions.set(root.id, createMockSession(root.id))
 
   const lifecycle: EngineLifecycleAdapter = {
-    bootstrap: async (sessionId) => ({
-      context: {
-        core: await coreMemory.readCore() as Record<string, unknown>,
-        memories: [],
-        currentMemory: null,
-        scope: null,
-      },
-      session: await (sessions as SessionTreeImpl).get(sessionId),
+    bootstrap: async () => ({
+      context: await memory.assembleContext(''),
+      session: await (sessions as SessionTreeImpl).get(root.id),
     }),
-    assemble: async () => ({
-      core: await coreMemory.readCore() as Record<string, unknown>,
-      memories: [],
-      currentMemory: null,
-      scope: null,
-    }),
+    assemble: async () => await memory.assembleContext(''),
     afterTurn: async () => ({
       coreUpdated: false,
       memoryUpdated: false,
@@ -150,7 +174,7 @@ async function main(): Promise<void> {
     async executeTool() {
       return {
         success: true,
-        data: await coreMemory.readCore(),
+        data: await memory.readCore(),
       }
     },
   }
@@ -186,7 +210,7 @@ async function main(): Promise<void> {
     capabilities: {
       lifecycle,
       tools,
-      skills: new SkillRouterImpl() as SkillRouter,
+      skills: new SkillRouterImpl(),
       confirm,
     },
     runtime: {

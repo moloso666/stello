@@ -3,9 +3,7 @@ import { readFile } from 'node:fs/promises'
 import { resolve, dirname, extname, normalize } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
-  CoreMemory,
   NodeFileSystemAdapter,
-  SessionMemory,
   SessionTreeImpl,
   SkillRouterImpl,
   createStelloAgent,
@@ -17,6 +15,7 @@ import {
   type SessionMeta,
   type SessionTree,
   type StelloAgentConfig,
+  type TurnRecord,
 } from '../../packages/core/src/index'
 import {
   createOpenAICompatibleAdapter,
@@ -85,10 +84,68 @@ function wrapSession(coreSessionId: string, session: Session) {
   }
 }
 
+/** 简易内存 MemoryEngine，仅用于 demo */
+function createInMemoryMemoryEngine(sessions: SessionTreeImpl): MemoryEngine {
+  const core: Record<string, unknown> = {
+    name: schema.name.default,
+    goal: schema.goal.default,
+    topics: schema.topics.default,
+  }
+  const memories = new Map<string, string>()
+  const scopes = new Map<string, string>()
+  const indexes = new Map<string, string>()
+  const recordStore = new Map<string, TurnRecord[]>()
+
+  return {
+    async readCore(path?: string) {
+      if (!path) return { ...core }
+      return core[path]
+    },
+    async writeCore(path: string, value: unknown) {
+      core[path] = value
+    },
+    async readMemory(sessionId: string) {
+      return memories.get(sessionId) ?? null
+    },
+    async writeMemory(sessionId: string, content: string) {
+      memories.set(sessionId, content)
+    },
+    async readScope(sessionId: string) {
+      return scopes.get(sessionId) ?? null
+    },
+    async writeScope(sessionId: string, content: string) {
+      scopes.set(sessionId, content)
+    },
+    async readIndex(sessionId: string) {
+      return indexes.get(sessionId) ?? null
+    },
+    async writeIndex(sessionId: string, content: string) {
+      indexes.set(sessionId, content)
+    },
+    async appendRecord(sessionId: string, record: TurnRecord) {
+      const list = recordStore.get(sessionId) ?? []
+      list.push(record)
+      recordStore.set(sessionId, list)
+    },
+    async readRecords(sessionId: string) {
+      return recordStore.get(sessionId) ?? []
+    },
+    async assembleContext(sessionId: string) {
+      const session = await sessions.get(sessionId)
+      const currentMemory = memories.get(sessionId) ?? null
+      const scope = scopes.get(sessionId) ?? null
+      const parentMemories: string[] = []
+      if (session?.parentId) {
+        const parentMem = memories.get(session.parentId)
+        if (parentMem) parentMemories.push(parentMem)
+      }
+      return { core: { ...core }, memories: parentMemories, currentMemory, scope }
+    },
+  }
+}
+
 async function bootstrap() {
   const fs = new NodeFileSystemAdapter(dataDir)
-  const coreMemory = new CoreMemory(fs, schema)
-  const sessionMemory = new SessionMemory(fs)
   const sessions = new SessionTreeImpl(fs)
   const llm = createOpenAICompatibleAdapter({
     apiKey: openaiApiKey!,
@@ -116,21 +173,8 @@ async function bootstrap() {
     },
   ] as const
 
-  const memory: MemoryEngine = {
-    readCore: (path?: string) => coreMemory.readCore(path),
-    writeCore: (path: string, value: unknown) => coreMemory.writeCore(path, value),
-    readMemory: (sessionId: string) => sessionMemory.readMemory(sessionId),
-    writeMemory: (sessionId: string, content: string) => sessionMemory.writeMemory(sessionId, content),
-    readScope: (sessionId: string) => sessionMemory.readScope(sessionId),
-    writeScope: (sessionId: string, content: string) => sessionMemory.writeScope(sessionId, content),
-    readIndex: (sessionId: string) => sessionMemory.readIndex(sessionId),
-    writeIndex: (sessionId: string, content: string) => sessionMemory.writeIndex(sessionId, content),
-    appendRecord: (sessionId: string, record) => sessionMemory.appendRecord(sessionId, record),
-    readRecords: (sessionId: string) => sessionMemory.readRecords(sessionId),
-    assembleContext: (sessionId: string) => assembleContext(sessionId, sessions, sessionMemory, coreMemory),
-  }
+  const memory = createInMemoryMemoryEngine(sessions)
 
-  await coreMemory.init()
   const root = await sessions.createRoot('Main Session')
   currentSessionId = root.id
 
@@ -328,28 +372,6 @@ function toViewSession(meta: SessionMeta) {
     turnCount: meta.turnCount,
     children: meta.children,
   }
-}
-
-async function assembleContext(
-  sessionId: string,
-  sessions: SessionTreeImpl,
-  sessionMemory: SessionMemory,
-  coreMemory: CoreMemory,
-) {
-  const session = await requireCoreSession(sessions, sessionId)
-  const core = await coreMemory.readCore() as Record<string, unknown>
-  const currentMemory = await sessionMemory.readMemory(sessionId)
-  const scope = await sessionMemory.readScope(sessionId)
-  const memories: string[] = []
-
-  if (session.parentId) {
-    const parentMemory = await sessionMemory.readMemory(session.parentId)
-    if (parentMemory) {
-      memories.push(parentMemory)
-    }
-  }
-
-  return { core, memories, currentMemory, scope }
 }
 
 async function main() {

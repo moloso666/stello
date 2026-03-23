@@ -1,16 +1,12 @@
-// ─── 引擎配置 + 主接口 + 事件类型定义 ───
+// ─── 引擎主接口 + 事件 + 策略类型定义 ───
 
 import type { SessionTree } from './session';
 import type {
-  InheritancePolicy,
-  CoreSchema,
   TurnRecord,
   AssembledContext,
   MemoryEngine,
 } from './memory';
-import type { FileSystemAdapter } from './fs';
 import type {
-  LifecycleHooks,
   BootstrapResult,
   IngestResult,
   AfterTurnResult,
@@ -34,16 +30,6 @@ export interface SplitStrategy {
   cooldownTurns?: number;
   /** 漂移阈值（0-1，默认 0.7），仅 embedder 启用时有效 */
   driftThreshold?: number;
-}
-
-/** 冒泡策略配置 */
-export interface BubblePolicy {
-  /** 冒泡时机（默认 immediate） */
-  timing: 'immediate' | 'on-archive';
-  /** 防抖毫秒数（默认 500） */
-  debounceMs?: number;
-  /** 冲突处理策略（默认 last-write-wins） */
-  conflictStrategy: 'last-write-wins';
 }
 
 // ─── 事件系统 ───
@@ -76,35 +62,6 @@ export interface StelloEventMap {
   coreChange: CoreChangeEvent;
   /** 错误通知 */
   error: StelloError;
-}
-
-// ─── 引擎配置 ───
-
-/**
- * Stello 引擎配置
- *
- * 创建 Stello 实例时传入。只有 dataDir、coreSchema、callLLM 是必填，
- * 其余都有合理默认值。
- */
-export interface StelloConfig {
-  /** 数据根目录路径 */
-  dataDir: string;
-  /** L1 核心档案的结构定义 */
-  coreSchema: CoreSchema;
-  /** LLM 调用函数（框架用来提取 L2 摘要等） */
-  callLLM: (prompt: string) => Promise<string>;
-  /** embedding 函数（可选，传入后激活路径 A 漂移检测） */
-  embedder?: (text: string) => Promise<number[]>;
-  /** 记忆继承策略（默认 'summary'） */
-  inheritancePolicy?: InheritancePolicy;
-  /** 冒泡策略 */
-  bubblePolicy?: Partial<BubblePolicy>;
-  /** 拆分策略 */
-  splitStrategy?: Partial<SplitStrategy>;
-  /** 生命周期钩子覆盖 */
-  hooks?: Partial<LifecycleHooks>;
-  /** 文件系统适配器（默认 FileSystemAdapter） */
-  adapter?: FileSystemAdapter;
 }
 
 // ─── 引擎主接口 ───

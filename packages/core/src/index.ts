@@ -36,26 +36,18 @@ export type {
   ConfirmProtocol,
   // 引擎
   SplitStrategy,
-  BubblePolicy,
   CoreChangeEvent,
   StelloError,
   StelloEventMap,
-  StelloConfig,
   StelloEngine,
 } from './types';
 
 // 导出实现
 export { NodeFileSystemAdapter } from './fs';
 export { SessionTreeImpl } from './session';
-export { CoreMemory } from './memory/core-memory';
-export { SessionMemory } from './memory/session-memory';
-export { LifecycleManager } from './lifecycle/lifecycle-manager';
-export { BubbleManager } from './memory/bubble';
-export { ConfirmManager } from './confirm/confirm-manager';
 export { SplitGuard } from './session/split-guard';
 export type { SplitCheckResult } from './session/split-guard';
 export { SkillRouterImpl } from './skill/skill-router';
-export { AgentTools } from './tools/agent-tools';
 export {
   adaptSessionToEngineRuntime,
   adaptMainSessionToSchedulerMainSession,
@@ -139,5 +131,3 @@ export type {
 // 导出辅助函数
 export { toVisualizerFormat } from './utils/export';
 export type { VisualizerNode } from './utils/export';
-export { exportForBrowser } from './utils/export-browser';
-export type { BrowserExport } from './utils/export-browser';

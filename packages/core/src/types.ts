@@ -33,13 +33,11 @@ export type {
   ConfirmProtocol,
 } from './types/lifecycle';
 
-// 引擎配置 + 主接口 + 事件
+// 引擎主接口 + 事件 + 策略
 export type {
   SplitStrategy,
-  BubblePolicy,
   CoreChangeEvent,
   StelloError,
   StelloEventMap,
-  StelloConfig,
   StelloEngine,
 } from './types/engine';
