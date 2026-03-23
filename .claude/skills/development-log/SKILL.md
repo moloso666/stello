@@ -610,20 +610,35 @@ SplitGuard 检查 Session 是否满足拆分条件，防止过早或过于频繁
 
 ---
 
+## Refactor：Scheduler 从 Engine 解耦到 Factory
+
+**时间**：2026-03-23
+**Commit**：`047ffd3`
+
+### 动机
+
+Engine 之前直接持有 Scheduler 和 MainSession，在 turn()/leaveSession()/archiveSession() 中 await 调度结果，违反 CLAUDE.md 中「所有异步副作用 fire-and-forget」的原则。
+
+### 决策
+
+- Engine 不再持有 Scheduler 和 MainSession
+- Factory 持有二者，构建闭包注入 EngineHooks
+- Engine 在事件点 fire-and-forget 调用 hooks
+- EngineTurnResult 移除 schedule 字段，只返回 `{ turn }`
+- leaveSession / archiveSession 返回 `{ sessionId }`
+- Factory 的 mergeHooks 保证用户 hooks 和 Scheduler hooks 同一 key 下都能触发
+
+### 影响范围
+
+StelloEngineImpl、DefaultEngineFactory、SessionOrchestrator、及对应测试文件。Scheduler 本身不变。Demo 和 Agent 层无代码改动。
+
+---
+
 ## 当前代码统计
 
 | 指标 | 数量 |
 |------|------|
-| @stello-ai/core 实现文件 | 11 个 |
-| @stello-ai/core 测试文件 | 13 个 |
-| @stello-ai/core 测试用例 | 107 个 |
-| @stello-ai/visualizer 实现文件 | 8 个 |
-| @stello-ai/visualizer 测试文件 | 3 个 |
-| @stello-ai/visualizer 测试用例 | 27 个 |
-| **总测试用例** | **134 个（全部通过）** |
-
----
-
-## 下一步：终端 demo + README + 发布
-
-终端 demo 验证完整工作流，编写 README 和 Quickstart，发布 npm 0.1.0。
+| @stello-ai/core 测试用例 | 168 个 |
+| @stello-ai/session 测试用例 | 77 个 |
+| @stello-ai/visualizer 测试用例 | 36 个 |
+| **总测试用例** | **281 个（全部通过）** |

@@ -82,14 +82,16 @@ const agent = createStelloAgent(config)
 StelloAgent
   -> SessionOrchestrator
     -> EngineRuntimeManager
-      -> StelloEngine
-        -> SessionRuntime
+      -> DefaultEngineFactory (持有 Scheduler + MainSession，构建闭包注入 hooks)
+        -> StelloEngine (不感知调度，只管对话循环 + fire-and-forget hooks)
+          -> SessionRuntime
 ```
 
 一句话：
 
 - `SessionRuntime` 负责单 Session 运行时能力
-- `StelloEngine` 负责编排单 Session 生命周期
+- `StelloEngine` 负责编排单 Session 生命周期（不感知调度）
+- `DefaultEngineFactory` 持有 Scheduler，通过闭包注入调度逻辑
 - `SessionOrchestrator` 负责多 Session 协调
 - `StelloAgent` 是统一入口
 
