@@ -10,7 +10,7 @@ import type {
   ToolExecutionResult,
 } from '../types/lifecycle';
 import type { StelloEngine, StelloEventMap } from '../types/engine';
-import type { CreateSessionOptions, SessionMeta } from '../types/session';
+import type { CreateSessionOptions, TopologyNode } from '../types/session';
 import type { SplitGuard } from '../session/split-guard';
 import type { SchedulerSession } from './scheduler';
 import {
@@ -44,7 +44,7 @@ export interface EngineLifecycleAdapter {
   /** 兼容旧的 afterTurn 流程 */
   afterTurn(sessionId: string, userMsg: TurnRecord, assistantMsg: TurnRecord): Promise<AfterTurnResult>;
   /** fork 子 Session */
-  prepareChildSpawn(options: CreateSessionOptions): Promise<SessionMeta>;
+  prepareChildSpawn(options: CreateSessionOptions): Promise<TopologyNode>;
 }
 
 /** tool 执行器最小契约 */
@@ -104,7 +104,7 @@ export interface EngineHooks {
   onRoundStart(ctx: EngineRoundContext): Promise<void> | void;
   onRoundEnd(ctx: EngineRoundResultContext): Promise<void> | void;
   onSessionArchive(ctx: { sessionId: string }): Promise<void> | void;
-  onSessionFork(ctx: { parentId: string; child: SessionMeta }): Promise<void> | void;
+  onSessionFork(ctx: { parentId: string; child: TopologyNode }): Promise<void> | void;
   onError(ctx: { source: string; error: Error }): Promise<void> | void;
 }
 
@@ -271,7 +271,7 @@ export class StelloEngineImpl implements StelloEngine {
   }
 
   /** 从当前 session 发起 fork，请求创建子 session */
-  async forkSession(options: Omit<CreateSessionOptions, 'parentId'>): Promise<SessionMeta> {
+  async forkSession(options: Omit<CreateSessionOptions, 'parentId'>): Promise<TopologyNode> {
     const parentId = this.session.id;
     if (this.splitGuard) {
       const check = await this.splitGuard.checkCanSplit(parentId);

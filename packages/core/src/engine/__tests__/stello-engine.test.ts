@@ -17,6 +17,8 @@ describe('StelloEngineImpl', () => {
 
   const sessions = {
     archive: vi.fn().mockResolvedValue(undefined),
+    getNode: vi.fn(),
+    getTree: vi.fn(),
   } as unknown as SessionTree;
 
   const memory = {} as MemoryEngine;
@@ -291,7 +293,7 @@ describe('StelloEngineImpl', () => {
 
     const engine = new StelloEngineImpl({
       session,
-      sessions: { archive } as unknown as SessionTree,
+      sessions: { archive, getNode: vi.fn(), getTree: vi.fn() } as unknown as SessionTree,
       memory,
       skills,
       confirm,
@@ -318,6 +320,10 @@ describe('StelloEngineImpl', () => {
     const prepareChildSpawn = vi.fn().mockResolvedValue({
       id: 'child-1',
       parentId: 's1',
+      children: [],
+      refs: [],
+      depth: 1,
+      index: 0,
       label: 'UI',
     });
     const splitGuard = {

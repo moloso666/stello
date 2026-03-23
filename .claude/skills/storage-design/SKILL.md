@@ -66,9 +66,23 @@ MainStorage extends SessionStorage:
 
 ```
 TopologyNode:
-  id: string            // = sessionId
+  id: string               // = sessionId
   parentId: string | null  // 树中的父节点（null = 根节点，即 Main Session）
-  label: string         // 冗余存储，避免渲染树时加载完整 SessionMeta
+  children: string[]       // 子节点 ID 列表
+  refs: string[]           // 跨分支引用 ID 列表
+  depth: number            // 层级深度（根 = 0）
+  index: number            // 在兄弟节点中的排序序号
+  label: string            // 冗余存储，避免渲染树时加载完整 SessionMeta
+```
+
+### SessionTreeNode（递归树，API 返回用）
+
+```
+SessionTreeNode:
+  id: string
+  label: string
+  status: 'active' | 'archived'
+  children: SessionTreeNode[]
 ```
 
 ---
@@ -114,7 +128,11 @@ InMemoryStorageAdapter 同理：实现 MainStorage，测试时按需注入。
 
 ---
 
-## SessionMeta（无 parentId、无 depth）
+## 两种 SessionMeta
+
+树状关系完全由 TopologyNode 维护，SessionMeta 不关心自己在树中的位置。
+
+### @stello-ai/session 的 SessionMeta
 
 ```
 SessionMeta:
@@ -128,4 +146,20 @@ SessionMeta:
   updatedAt: string
 ```
 
-树状关系完全由 TopologyNode 维护，SessionMeta 不关心自己在树中的位置。
+### @stello-ai/core 的 SessionMeta（精简版）
+
+```
+SessionMeta:
+  readonly id: string
+  label: string
+  scope: string | null
+  status: 'active' | 'archived'
+  turnCount: number
+  metadata: Record<string, unknown>
+  tags: string[]
+  createdAt: string
+  updatedAt: string
+  lastActiveAt: string
+```
+
+注意：core 的 SessionMeta **不含** parentId、children、refs、depth、index 等树字段。

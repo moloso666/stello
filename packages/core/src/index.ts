@@ -6,6 +6,8 @@ export type {
   // Session 系统
   SessionStatus,
   SessionMeta,
+  TopologyNode,
+  SessionTreeNode,
   CreateSessionOptions,
   SessionTree,
   // 记忆系统

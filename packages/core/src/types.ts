@@ -1,7 +1,7 @@
 // ─── Stello 全量类型定义统一导出 ───
 
 // Session 系统
-export type { SessionStatus, SessionMeta, CreateSessionOptions, SessionTree } from './types/session';
+export type { SessionStatus, SessionMeta, TopologyNode, SessionTreeNode, CreateSessionOptions, SessionTree } from './types/session';
 
 // 记忆系统
 export type {

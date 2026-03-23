@@ -22,6 +22,9 @@ description: Stello 仓库总览入口。用于快速理解 core、session、orc
 - `@stello-ai/session`
   - 单个 Session 原语层
   - 负责 `send / stream / consolidate / integrate`
+- `@stello-ai/server`
+  - 服务化适配层
+  - PG 持久化 + REST/WS 传输 + 多租户 Space 管理
 - `@stello-ai/visualizer`
   - 可视化层
 - `demo/stello-agent-basic`
@@ -53,7 +56,7 @@ const agent = createStelloAgent(config)
 
 - 不直接暴露 REST / WebSocket
 - 只暴露本地可调用方法
-- 是未来 `@stello-ai/server` 的承接对象
+- 是 `@stello-ai/server` 的承接对象（Server 已实现）
 
 ---
 
@@ -158,4 +161,4 @@ Skills（架构设计）：
 - `server` = 服务化适配层
 - `sdk` = 对 server API 的薄客户端封装
 
-未来 `@stello-ai/server` 应承接 `StelloAgent`，而不是重写编排逻辑。
+`@stello-ai/server` 已实现，承接 `StelloAgent`，不重写编排逻辑。

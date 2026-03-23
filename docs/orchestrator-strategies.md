@@ -11,7 +11,7 @@
 
 ```ts
 interface OrchestrationStrategy {
-  resolveForkParent(source: SessionMeta, sessions: SessionTree): Promise<string>
+  resolveForkParent(source: TopologyNode, sessions: SessionTree): Promise<string>
 }
 ```
 

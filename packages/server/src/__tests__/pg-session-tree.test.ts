@@ -46,13 +46,16 @@ describe('PgSessionTree', () => {
         metadata: { key: 'val' },
       })
 
+      // TopologyNode 字段
       expect(child.parentId).toBe(root.id)
       expect(child.label).toBe('Child 1')
       expect(child.depth).toBe(1)
-      expect(child.scope).toBe('coding')
-      expect(child.tags).toEqual(['test'])
-      expect(child.metadata).toEqual({ key: 'val' })
       expect(child.index).toBe(0)
+
+      // SessionMeta 字段通过 get() 验证
+      const meta = await tree.get(child.id)
+      expect(meta!.label).toBe('Child 1')
+      expect(meta!.status).toBe('active')
     })
 
     it('多个子节点 index 递增', async () => {
@@ -72,18 +75,57 @@ describe('PgSessionTree', () => {
   })
 
   describe('get', () => {
-    it('返回含 children 和 refs 的完整 SessionMeta', async () => {
+    it('返回精简 SessionMeta（不含树字段）', async () => {
       const root = await tree.createRoot()
-      const c1 = await tree.createChild({ parentId: root.id, label: 'C1' })
-      const c2 = await tree.createChild({ parentId: root.id, label: 'C2' })
+      await tree.createChild({ parentId: root.id, label: 'C1' })
 
       const fetched = await tree.get(root.id)
       expect(fetched).not.toBeNull()
-      expect(fetched!.children.sort()).toEqual([c1.id, c2.id].sort())
+      expect(fetched!.id).toBe(root.id)
+      expect(fetched!.status).toBe('active')
+      // SessionMeta 不含树字段
+      expect(fetched).not.toHaveProperty('children')
+      expect(fetched).not.toHaveProperty('parentId')
+      expect(fetched).not.toHaveProperty('depth')
     })
 
     it('不存在返回 null', async () => {
       expect(await tree.get('00000000-0000-0000-0000-000000000000')).toBeNull()
+    })
+  })
+
+  describe('getNode', () => {
+    it('返回含 children 和 refs 的 TopologyNode', async () => {
+      const root = await tree.createRoot()
+      const c1 = await tree.createChild({ parentId: root.id, label: 'C1' })
+      const c2 = await tree.createChild({ parentId: root.id, label: 'C2' })
+
+      const node = await tree.getNode(root.id)
+      expect(node).not.toBeNull()
+      expect(node!.children.sort()).toEqual([c1.id, c2.id].sort())
+      expect(node!.depth).toBe(0)
+    })
+
+    it('不存在返回 null', async () => {
+      expect(await tree.getNode('00000000-0000-0000-0000-000000000000')).toBeNull()
+    })
+  })
+
+  describe('getTree', () => {
+    it('返回递归树结构', async () => {
+      const root = await tree.createRoot('Root')
+      const c1 = await tree.createChild({ parentId: root.id, label: 'C1' })
+      await tree.createChild({ parentId: c1.id, label: 'C1.1' })
+      await tree.createChild({ parentId: root.id, label: 'C2' })
+
+      const sessionTree = await tree.getTree()
+      expect(sessionTree.id).toBe(root.id)
+      expect(sessionTree.label).toBe('Root')
+      expect(sessionTree.children).toHaveLength(2)
+      expect(sessionTree.children[0]!.label).toBe('C1')
+      expect(sessionTree.children[0]!.children).toHaveLength(1)
+      expect(sessionTree.children[0]!.children[0]!.label).toBe('C1.1')
+      expect(sessionTree.children[1]!.label).toBe('C2')
     })
   })
 
@@ -128,8 +170,8 @@ describe('PgSessionTree', () => {
       const c2 = await tree.createChild({ parentId: root.id, label: 'C2' })
 
       await tree.addRef(c1.id, c2.id)
-      const fetched = await tree.get(c1.id)
-      expect(fetched!.refs).toContain(c2.id)
+      const node = await tree.getNode(c1.id)
+      expect(node!.refs).toContain(c2.id)
     })
 
     it('不能引用自己', async () => {
@@ -156,8 +198,8 @@ describe('PgSessionTree', () => {
 
       await tree.addRef(c1.id, c2.id)
       await tree.addRef(c1.id, c2.id) // 不应报错
-      const fetched = await tree.get(c1.id)
-      expect(fetched!.refs).toHaveLength(1)
+      const node = await tree.getNode(c1.id)
+      expect(node!.refs).toHaveLength(1)
     })
   })
 

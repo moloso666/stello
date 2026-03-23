@@ -1,6 +1,6 @@
 // ─── 生命周期钩子 + Skill + 确认协议 + Agent Tools 类型定义 ───
 
-import type { SessionMeta, CreateSessionOptions } from './session';
+import type { SessionMeta, TopologyNode, CreateSessionOptions } from './session';
 import type { AssembledContext, TurnRecord } from './memory';
 
 // ─── 生命周期钩子 ───
@@ -53,7 +53,7 @@ export interface LifecycleHooks {
   /** 切换 Session：旧 Session 更新 memory.md → 新 Session bootstrap */
   onSessionSwitch?(fromId: string, toId: string): Promise<BootstrapResult>;
   /** 创建子 Session 前：创建文件夹 + meta.json + 空 memory.md + 生成 scope.md + 更新父 index.md */
-  prepareChildSpawn?(options: CreateSessionOptions): Promise<SessionMeta>;
+  prepareChildSpawn?(options: CreateSessionOptions): Promise<TopologyNode>;
 }
 
 // ─── Skill 插槽 ───
@@ -182,7 +182,7 @@ export interface UpdateProposal {
  */
 export interface ConfirmProtocol {
   /** 确认拆分 → 创建子 Session */
-  confirmSplit(proposal: SplitProposal): Promise<SessionMeta>;
+  confirmSplit(proposal: SplitProposal): Promise<TopologyNode>;
   /** 拒绝拆分 → 不创建，继续当前 Session */
   dismissSplit(proposal: SplitProposal): Promise<void>;
   /** 确认 L1 更新 → 写入 core.json + 触发 onChange + 冒泡 */

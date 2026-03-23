@@ -7,14 +7,9 @@ import { createStelloAgent, type StelloAgentConfig } from '../stello-agent';
 describe('StelloAgent', () => {
   const rootSession = {
     id: 'root',
-    parentId: null,
-    children: [],
-    refs: [],
     label: 'Main',
-    index: 0,
     scope: null,
     status: 'active' as const,
-    depth: 0,
     turnCount: 0,
     metadata: {},
     tags: [],
@@ -124,10 +119,17 @@ describe('StelloAgent', () => {
     const childSession = {
       ...rootSession,
       id: 'child-1',
-      parentId: 'root',
-      depth: 1,
       label: 'UI',
       scope: 'ui',
+    };
+    const childNode = {
+      id: 'child-1',
+      parentId: 'root',
+      children: [],
+      refs: [],
+      depth: 1,
+      index: 0,
+      label: 'UI',
     };
 
     const rootRuntime = {
@@ -148,7 +150,7 @@ describe('StelloAgent', () => {
 
     const prepareChildSpawn = vi
       .fn()
-      .mockResolvedValue({ id: 'child-2', parentId: 'root', label: 'UI 2' });
+      .mockResolvedValue({ id: 'child-2', parentId: 'root', children: [], refs: [], depth: 1, index: 1, label: 'UI 2' });
 
     const agent = createStelloAgent({
       sessions: {
@@ -157,6 +159,7 @@ describe('StelloAgent', () => {
           if (id === 'child-1') return childSession;
           return null;
         }),
+        getNode: vi.fn().mockResolvedValue(childNode),
         getRoot: vi.fn().mockResolvedValue(rootSession),
         archive: vi.fn(),
       } as unknown as SessionTree,

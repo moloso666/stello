@@ -5,7 +5,7 @@ description: "@stello-ai/server 的包结构、职责边界、依赖关系。Ser
 
 # `@stello-ai/server` 包设计
 
-> 状态：**Phase 1-3 已实现，Phase 4-5 进行中**（2026-03-24）
+> 状态：**Phase 1-5 已实现**（2026-03-24）
 
 ---
 
@@ -42,14 +42,14 @@ packages/server/
     space/                          -- ✅ 已实现
       space-manager.ts              -- Space CRUD + root session 自动创建
       agent-pool.ts                 -- 懒 StelloAgent 缓存 + TTL 驱逐
-    http/                           -- 🔨 Phase 4
+    http/                           -- ✅ Phase 4
       app.ts                        -- createApp() Hono 工厂
       middleware/
         auth.ts                     -- X-API-Key 认证中间件
       routes/
         spaces.ts                   -- Space CRUD 路由
         sessions.ts                 -- Session 查询 + agent 操作路由
-    ws/                             -- 🔨 Phase 5
+    ws/                             -- ✅ Phase 5
       gateway.ts                    -- WS 升级 + 消息分发
       connection-manager.ts         -- connectionId ↔ sessionId 映射
     create-server.ts                -- 🔨 createStelloServer() 入口
@@ -61,9 +61,9 @@ packages/server/
     pg-memory-engine.test.ts        -- ✅ 9 tests
     space-manager.test.ts           -- ✅ 7 tests
     agent-pool.test.ts              -- ✅ 5 tests + 3 idle
-    rest-spaces.test.ts             -- 🔨 Phase 4
-    rest-sessions.test.ts           -- 🔨 Phase 4
-    ws-gateway.test.ts              -- 🔨 Phase 5
+    rest-spaces.test.ts             -- ✅ Phase 4
+    rest-sessions.test.ts           -- ✅ Phase 4
+    ws-gateway.test.ts              -- ✅ Phase 5
 ```
 
 ---

@@ -1,19 +1,14 @@
 import { describe, it, expect } from 'vitest';
 import { toVisualizerFormat } from '../export';
-import type { SessionMeta } from '../../types/session';
+import type { SessionMeta, TopologyNode } from '../../types/session';
 
 /** 构造最小 SessionMeta */
 function makeMeta(overrides: Partial<SessionMeta> = {}): SessionMeta {
   return {
     id: 'test-id',
-    parentId: null,
-    children: [],
-    refs: [],
     label: 'Test',
-    index: 0,
     scope: null,
     status: 'active',
-    depth: 0,
     turnCount: 3,
     metadata: { custom: true },
     tags: ['tag1'],
@@ -24,10 +19,25 @@ function makeMeta(overrides: Partial<SessionMeta> = {}): SessionMeta {
   };
 }
 
+/** 构造最小 TopologyNode */
+function makeNode(overrides: Partial<TopologyNode> = {}): TopologyNode {
+  return {
+    id: 'test-id',
+    parentId: null,
+    children: [],
+    refs: [],
+    depth: 0,
+    index: 0,
+    label: 'Test',
+    ...overrides,
+  };
+}
+
 describe('toVisualizerFormat', () => {
   it('正确映射字段，排除 visualizer 不需要的字段', () => {
-    const sessions = [makeMeta({ id: 'root', turnCount: 5, children: ['child-1'] })];
-    const result = toVisualizerFormat(sessions);
+    const nodes = [makeNode({ id: 'root', children: ['child-1'] })];
+    const sessions = [makeMeta({ id: 'root', turnCount: 5 })];
+    const result = toVisualizerFormat(nodes, sessions);
     expect(result).toEqual([
       {
         id: 'root',
@@ -48,6 +58,6 @@ describe('toVisualizerFormat', () => {
   });
 
   it('空数组返回空数组', () => {
-    expect(toVisualizerFormat([])).toEqual([]);
+    expect(toVisualizerFormat([], [])).toEqual([]);
   });
 });

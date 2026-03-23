@@ -1,4 +1,4 @@
-import type { CreateSessionOptions, SessionMeta, SessionTree } from '../types/session';
+import type { CreateSessionOptions, SessionMeta, TopologyNode, SessionTree } from '../types/session';
 import type { BootstrapResult, IngestResult } from '../types/lifecycle';
 import type { TurnRecord } from '../types/memory';
 import type { StelloEngine } from '../types/engine';
@@ -16,7 +16,7 @@ export interface OrchestratorEngine extends StelloEngine {
   /** 归档当前绑定 session */
   archiveSession(): Promise<{ sessionId: string }>;
   /** 从当前绑定 session 发起 fork */
-  forkSession(options: Omit<CreateSessionOptions, 'parentId'>): Promise<SessionMeta>;
+  forkSession(options: Omit<CreateSessionOptions, 'parentId'>): Promise<TopologyNode>;
 }
 
 /** Engine 工厂 */
@@ -28,7 +28,7 @@ export interface EngineFactory {
 /** Orchestrator 编排策略 */
 export interface OrchestrationStrategy {
   /** 决定一次 fork 最终应该挂到哪个父节点下 */
-  resolveForkParent(source: SessionMeta, sessions: SessionTree): Promise<string>;
+  resolveForkParent(source: TopologyNode, sessions: SessionTree): Promise<string>;
 }
 
 /**
@@ -40,7 +40,7 @@ export interface OrchestrationStrategy {
  * - 结果是 MainSession 的下一层保持平铺
  */
 export class MainSessionFlatStrategy implements OrchestrationStrategy {
-  async resolveForkParent(source: SessionMeta, sessions: SessionTree): Promise<string> {
+  async resolveForkParent(source: TopologyNode, sessions: SessionTree): Promise<string> {
     if (source.parentId === null) {
       return source.id;
     }
@@ -156,9 +156,11 @@ export class SessionOrchestrator {
   async forkSession(
     sessionId: string,
     options: Omit<CreateSessionOptions, 'parentId'>,
-  ): Promise<SessionMeta> {
-    const source = await this.requireSession(sessionId);
-    const effectiveParentId = await this.strategy.resolveForkParent(source, this.sessions);
+  ): Promise<TopologyNode> {
+    await this.requireSession(sessionId);
+    const node = await this.sessions.getNode(sessionId);
+    if (!node) throw new Error(`拓扑节点不存在: ${sessionId}`);
+    const effectiveParentId = await this.strategy.resolveForkParent(node, this.sessions);
 
     return this.runSerial(effectiveParentId, async () => {
       return this.withRuntime(effectiveParentId, (engine) => engine.forkSession(options));

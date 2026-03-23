@@ -114,7 +114,7 @@ leaveSession(sessionId: string): Promise<{ sessionId: string }>
 forkSession(
   sessionId: string,
   options: Omit<CreateSessionOptions, "parentId">,
-): Promise<SessionMeta>
+): Promise<TopologyNode>
 ```
 
 语义：
@@ -231,21 +231,12 @@ createEngine(sessionId: string): Promise<StelloEngine>
 
 ## 五、只读暴露对象
 
-当前 `StelloAgent` 还暴露了一些只读对象，方便高级调用方访问：
+当前 `StelloAgent` 暴露两个只读引用：
 
-- `agent.config`
-- `agent.sessions`
-- `agent.orchestrator`
-- `agent.engineFactory`
-- `agent.runtimeManager`
+- `agent.config` — 归一化后的配置
+- `agent.sessions` — SessionTree 引用
 
-这些对象主要用于：
-
-- 高级装配
-- debug
-- server 适配层
-
-普通业务代码不建议过度依赖这些内部对象。
+内部组件（orchestrator / engineFactory / runtimeManager）不对外暴露。
 
 ---
 

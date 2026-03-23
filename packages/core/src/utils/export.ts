@@ -1,6 +1,6 @@
 // ─── Visualizer 数据转换辅助 ───
 
-import type { SessionMeta } from '../types/session';
+import type { SessionMeta, TopologyNode } from '../types/session';
 
 /** visualizer 需要的节点格式 */
 export interface VisualizerNode {
@@ -15,17 +15,27 @@ export interface VisualizerNode {
   lastActiveAt: string;
 }
 
-/** 将 SessionMeta 数组转换为 visualizer 可直接消费的格式 */
-export function toVisualizerFormat(sessions: SessionMeta[]): VisualizerNode[] {
-  return sessions.map((s) => ({
-    id: s.id,
-    parentId: s.parentId,
-    label: s.label,
-    depth: s.depth,
-    turnCount: s.turnCount,
-    status: s.status,
-    children: s.children,
-    refs: s.refs,
-    lastActiveAt: s.lastActiveAt,
-  }));
+/** 将 TopologyNode + SessionMeta 合并为 visualizer 可消费的格式 */
+export function toVisualizerFormat(
+  nodes: TopologyNode[],
+  sessions: SessionMeta[],
+): VisualizerNode[] {
+  const sessionMap = new Map(sessions.map((s) => [s.id, s]));
+  return nodes
+    .map((n) => {
+      const s = sessionMap.get(n.id);
+      if (!s) return null;
+      return {
+        id: n.id,
+        parentId: n.parentId,
+        label: n.label,
+        depth: n.depth,
+        turnCount: s.turnCount,
+        status: s.status,
+        children: n.children,
+        refs: n.refs,
+        lastActiveAt: s.lastActiveAt,
+      };
+    })
+    .filter((v): v is VisualizerNode => v !== null);
 }

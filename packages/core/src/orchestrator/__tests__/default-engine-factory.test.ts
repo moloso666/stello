@@ -9,6 +9,8 @@ describe('DefaultEngineFactory', () => {
   const baseOptions = () => ({
     sessions: {
       archive: vi.fn(),
+      getNode: vi.fn(),
+      getTree: vi.fn(),
     } as unknown as SessionTree,
     memory: {} as MemoryEngine,
     skills: {

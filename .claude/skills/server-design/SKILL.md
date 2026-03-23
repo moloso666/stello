@@ -5,7 +5,7 @@ description: Server 层设计：传输层架构（REST/Hono + WS）、StelloAgen
 
 # Server 层（Service Layer）技术设计
 
-> 状态：**Phase 1-3 已实现**（存储 + Space 管理 + Agent 池），**Phase 4-5 实现中**（传输层）
+> 状态：**Phase 1-5 已实现**（存储 + Space 管理 + Agent 池 + REST + WS）
 >
 > 相关 skill：**server-storage**（PG 持久化）、**engine-design**（Engine 内部）、**orchestrator-usage**（StelloAgent API）
 
@@ -15,13 +15,13 @@ description: Server 层设计：传输层架构（REST/Hono + WS）、StelloAgen
 
 ```
 ┌─────────────────────────────────────────────────┐
-│  Transport Layer（Phase 4-5）                    │
+│  Transport Layer（已实现）                        │
 │  Hono REST + ws WebSocket                       │
 ├─────────────────────────────────────────────────┤
-│  Space 管理层（Phase 3，已实现）                  │
+│  Space 管理层（已实现）                           │
 │  SpaceManager · AgentPool                       │
 ├─────────────────────────────────────────────────┤
-│  PG Storage Layer（Phase 2，已实现）              │
+│  PG Storage Layer（已实现）                       │
 │  PgSessionStorage · PgMainStorage               │
 │  PgSessionTree · PgMemoryEngine                 │
 ├─────────────────────────────────────────────────┤
@@ -52,7 +52,7 @@ description: Server 层设计：传输层架构（REST/Hono + WS）、StelloAgen
 
 | 路由 | StelloAgent 映射 |
 |------|-----------------|
-| `GET /spaces/:spaceId/sessions` | PgSessionTree.listAll() |
+| `GET /spaces/:spaceId/sessions` | PgSessionTree.getTree() → SessionTreeNode（递归嵌套树） |
 | `GET /spaces/:spaceId/sessions/:id` | PgSessionTree.get(id) |
 | `POST /spaces/:spaceId/sessions/:id/fork` | agent.forkSession(id, body) |
 | `POST /spaces/:spaceId/sessions/:id/archive` | agent.archiveSession(id) |
@@ -86,7 +86,7 @@ URL: `ws://host/spaces/:spaceId/ws`
 | `stream.delta { chunk }` | 流式增量 token |
 | `stream.end { result }` | 流式完成 + 完整结果 |
 | `session.left { sessionId }` | leave 确认 |
-| `session.forked { child }` | fork 后的新 SessionMeta |
+| `session.forked { child }` | fork 后的新 TopologyNode |
 | `error { message, code? }` | 错误 |
 
 ### 断连处理

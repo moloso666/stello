@@ -17,13 +17,12 @@ function createPoolOptions(overrides?: Partial<AgentPoolOptions>): AgentPoolOpti
           bootstrap: async () => ({
             context: { core: {}, memories: [], currentMemory: null, scope: null },
             session: {
-              id: '', parentId: null, children: [], refs: [], label: '', index: 0,
-              scope: null, status: 'active' as const, depth: 0, turnCount: 0,
-              metadata: {}, tags: [], createdAt: '', updatedAt: '', lastActiveAt: '',
+              id: '', label: '', scope: null, status: 'active' as const,
+              turnCount: 0, metadata: {}, tags: [], createdAt: '', updatedAt: '', lastActiveAt: '',
             },
           }),
           afterTurn: async () => ({ coreUpdated: false, memoryUpdated: false, recordAppended: false }),
-          prepareChildSpawn: async (opts) => ({ ...opts, id: 'mock', parentId: null, children: [], refs: [], index: 0, scope: null, status: 'active' as const, depth: 0, turnCount: 0, metadata: {}, tags: [], createdAt: '', updatedAt: '', lastActiveAt: '' }),
+          prepareChildSpawn: async (opts) => ({ ...opts, id: 'mock', parentId: null, children: [], refs: [], index: 0, depth: 0, label: opts.label }),
         },
         tools: {
           getToolDefinitions: () => [],

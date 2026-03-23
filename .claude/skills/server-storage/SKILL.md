@@ -65,16 +65,18 @@ description: "@stello-ai/server 的 PG 持久化层：7 表 Schema、4 个 Stora
 
 | 方法 | 说明 |
 |------|------|
-| `createRoot(label?)` | 额外方法，创建 space 时调用 |
-| `createChild(options)` | 自动计算 index（兄弟 COUNT）和 depth（parent+1） |
-| `get(id)` | 返回完整 core SessionMeta（含 children[] + refs[]） |
-| `getRoot()` | WHERE parent_id IS NULL |
-| `listAll()` | 全量，每个都水合 children/refs |
+| `createRoot(label?)` | 额外方法，创建 space 时调用，返回 TopologyNode |
+| `createChild(options)` | 自动计算 index 和 depth，返回 TopologyNode |
+| `get(id)` | 返回精简 SessionMeta（无树字段） |
+| `getRoot()` | WHERE parent_id IS NULL，返回 SessionMeta |
+| `listAll()` | 全量 SessionMeta 列表（无树字段） |
+| `getNode(id)` | 返回 TopologyNode（含 parentId, children[], refs[], depth, index） |
+| `getTree()` | 返回递归嵌套 SessionTreeNode（API 返回用） |
 | `archive(id)` | SET status='archived' |
 | `addRef(fromId, toId)` | 递归 CTE 校验祖先/后代，幂等 INSERT |
 | `updateMeta(id, updates)` | 部分 UPDATE（label/scope/tags/metadata/turnCount） |
-| `getAncestors(id)` | WITH RECURSIVE CTE |
-| `getSiblings(id)` | 两步：查 parent → 查同 parent 兄弟 |
+| `getAncestors(id)` | WITH RECURSIVE CTE，返回 TopologyNode[] |
+| `getSiblings(id)` | 两步：查 parent → 查同 parent 兄弟，返回 TopologyNode[] |
 
 ### 4. PgMemoryEngine — 实现 `MemoryEngine`（@stello-ai/core）
 
@@ -100,8 +102,10 @@ description: "@stello-ai/server 的 PG 持久化层：7 表 Schema、4 个 Stora
 ### Slot 统一存储
 `session_data (session_id, key)` 表存储 system_prompt / insight / memory / scope / index 五种数据，通过 key 区分。UPSERT 模式 `ON CONFLICT (session_id, key) DO UPDATE`。
 
-### 两种 SessionMeta
-PG 存 sessions 表超集。PgSessionStorage 投影为 session 包 SessionMeta（无 parentId/depth），PgSessionTree 投影为 core SessionMeta（含 parentId/children/refs/depth/turnCount/scope/lastActiveAt）。
+### 两种 SessionMeta + TopologyNode
+PG 存 sessions 表超集。PgSessionStorage 投影为 @stello-ai/session 的 SessionMeta（有 role，无 scope/turnCount），PgSessionTree 分别投影为：
+- **SessionMeta**（@stello-ai/core）：id, label, scope, status, turnCount, metadata, tags, 时间戳（无树字段）
+- **TopologyNode**：id, parentId, children[], refs[], depth, index, label（纯树结构）
 
 ### 递归 CTE
 `getAncestors`、`getAllDescendantIds`、`assembleContext` 都用 `WITH RECURSIVE` 遍历树结构。

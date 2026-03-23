@@ -12,20 +12,25 @@ describe('SessionOrchestrator', () => {
 
   const sessionMeta = {
     id: 's1',
-    parentId: null,
-    children: [],
-    refs: [],
     label: 'Root',
-    index: 0,
     scope: null,
     status: 'active' as const,
-    depth: 0,
     turnCount: 0,
     metadata: {},
     tags: [],
     createdAt: '2026-01-01T00:00:00Z',
     updatedAt: '2026-01-01T00:00:00Z',
     lastActiveAt: '2026-01-01T00:00:00Z',
+  };
+
+  const sessionNode = {
+    id: 's1',
+    parentId: null,
+    children: [],
+    refs: [],
+    depth: 0,
+    index: 0,
+    label: 'Root',
   };
 
   it('enterSession 会校验 session 并调用对应 engine.enterSession', async () => {
@@ -93,6 +98,7 @@ describe('SessionOrchestrator', () => {
   it('forkSession 会在指定父 session 上发起 fork', async () => {
     const sessions = {
       get: vi.fn().mockResolvedValue(sessionMeta),
+      getNode: vi.fn().mockResolvedValue(sessionNode),
     } as unknown as SessionTree;
     const engine = {
       forkSession: vi.fn().mockResolvedValue({ id: 'child-1', parentId: 's1', label: 'UI' }),
@@ -110,15 +116,17 @@ describe('SessionOrchestrator', () => {
   });
 
   it('MainSession 平铺策略下，子节点继续 fork 会挂回主节点', async () => {
-    const root = { ...sessionMeta, id: 'root', parentId: null };
-    const child = { ...sessionMeta, id: 'child-1', parentId: 'root', depth: 1 };
+    const rootMeta = { ...sessionMeta, id: 'root' };
+    const childMeta = { ...sessionMeta, id: 'child-1' };
+    const childNode = { id: 'child-1', parentId: 'root', children: [], refs: [], depth: 1, index: 0, label: 'child-1' };
     const sessions = {
       get: vi.fn().mockImplementation(async (id: string) => {
-        if (id === 'child-1') return child;
-        if (id === 'root') return root;
+        if (id === 'child-1') return childMeta;
+        if (id === 'root') return rootMeta;
         return null;
       }),
-      getRoot: vi.fn().mockResolvedValue(root),
+      getNode: vi.fn().mockResolvedValue(childNode),
+      getRoot: vi.fn().mockResolvedValue(rootMeta),
     } as unknown as SessionTree;
     const rootEngine = {
       forkSession: vi.fn().mockResolvedValue({ id: 'child-2', parentId: 'root', label: 'UI 2' }),
@@ -257,17 +265,24 @@ describe('SessionOrchestrator', () => {
   });
 
   it('平铺策略下，多个子节点同时 fork 到主节点时也会按主节点串行', async () => {
-    const root = { ...sessionMeta, id: 'root', parentId: null };
-    const childA = { ...sessionMeta, id: 'child-a', parentId: 'root', depth: 1 };
-    const childB = { ...sessionMeta, id: 'child-b', parentId: 'root', depth: 1 };
+    const rootMeta = { ...sessionMeta, id: 'root' };
+    const childAMeta = { ...sessionMeta, id: 'child-a' };
+    const childBMeta = { ...sessionMeta, id: 'child-b' };
+    const nodeA = { id: 'child-a', parentId: 'root', children: [], refs: [], depth: 1, index: 0, label: 'child-a' };
+    const nodeB = { id: 'child-b', parentId: 'root', children: [], refs: [], depth: 1, index: 1, label: 'child-b' };
     const sessions = {
       get: vi.fn().mockImplementation(async (id: string) => {
-        if (id === 'root') return root;
-        if (id === 'child-a') return childA;
-        if (id === 'child-b') return childB;
+        if (id === 'root') return rootMeta;
+        if (id === 'child-a') return childAMeta;
+        if (id === 'child-b') return childBMeta;
         return null;
       }),
-      getRoot: vi.fn().mockResolvedValue(root),
+      getNode: vi.fn().mockImplementation(async (id: string) => {
+        if (id === 'child-a') return nodeA;
+        if (id === 'child-b') return nodeB;
+        return null;
+      }),
+      getRoot: vi.fn().mockResolvedValue(rootMeta),
     } as unknown as SessionTree;
 
     const order: string[] = [];

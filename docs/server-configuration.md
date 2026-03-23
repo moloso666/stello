@@ -125,8 +125,8 @@ interface EngineLifecycleAdapter {
   bootstrap(sessionId: string): Promise<BootstrapResult>
   /** turn 结束后的副作用（写记录、更新 core 等） */
   afterTurn(sessionId: string, userMsg: TurnRecord, assistantMsg: TurnRecord): Promise<AfterTurnResult>
-  /** fork 时准备子 session 的元数据 */
-  prepareChildSpawn(options: CreateSessionOptions): Promise<SessionMeta>
+  /** fork 时准备子 session，返回拓扑节点 */
+  prepareChildSpawn(options: CreateSessionOptions): Promise<TopologyNode>
 }
 ```
 
@@ -169,7 +169,7 @@ interface SkillRouter {
 
 ```typescript
 interface ConfirmProtocol {
-  confirmSplit(proposal: SplitProposal): Promise<SessionMeta>
+  confirmSplit(proposal: SplitProposal): Promise<TopologyNode>
   dismissSplit(proposal: SplitProposal): Promise<void>
   confirmUpdate(proposal: UpdateProposal): Promise<void>
   dismissUpdate(proposal: UpdateProposal): Promise<void>
@@ -271,7 +271,7 @@ interface StelloAgentOrchestrationConfig {
 ```typescript
 interface OrchestrationStrategy {
   /** 给定源 session，决定 fork 的父节点 ID */
-  resolveForkParent(source: SessionMeta, sessions: SessionTree): Promise<string>
+  resolveForkParent(source: TopologyNode, sessions: SessionTree): Promise<string>
 }
 ```
 
@@ -356,7 +356,7 @@ interface EngineHooks {
   onRoundStart(ctx: { sessionId: string; input: string }): Promise<void> | void
   onRoundEnd(ctx: { sessionId: string; input: string; turn: TurnRunnerResult }): Promise<void> | void
   onSessionArchive(ctx: { sessionId: string }): Promise<void> | void
-  onSessionFork(ctx: { parentId: string; child: SessionMeta }): Promise<void> | void
+  onSessionFork(ctx: { parentId: string; child: TopologyNode }): Promise<void> | void
   onError(ctx: { source: string; error: Error }): Promise<void> | void
 }
 ```

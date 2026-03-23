@@ -27,15 +27,15 @@ export function createSessionRoutes(
 ): Hono<AuthEnv> {
   const app = new Hono<AuthEnv>()
 
-  /** 列出 space 下所有 sessions */
+  /** 获取 space 下的 session 树（递归嵌套结构） */
   app.get('/:spaceId/sessions', async (c) => {
     const spaceId = c.req.param('spaceId')
     const err = await requireOwnership(c, spaceManager, spaceId)
     if (err) return err
 
     const tree = new PgSessionTree(pool, spaceId)
-    const sessions = await tree.listAll()
-    return c.json(sessions)
+    const sessionTree = await tree.getTree()
+    return c.json(sessionTree)
   })
 
   /** 获取单个 session */

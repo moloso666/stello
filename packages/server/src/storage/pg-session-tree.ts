@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import type pg from 'pg'
-import type { SessionTree, SessionMeta, CreateSessionOptions } from '@stello-ai/core'
+import type { SessionTree, SessionMeta, TopologyNode, SessionTreeNode, CreateSessionOptions } from '@stello-ai/core'
 
 /** Pool 或事务内的 PoolClient */
 type PgClient = pg.Pool | pg.PoolClient
@@ -10,28 +10,36 @@ function now(): string {
   return new Date().toISOString()
 }
 
-/** 从 DB 行重建 core SessionMeta（含 children 和 refs） */
-function rowToCoreSessionMeta(
-  row: Record<string, unknown>,
-  children: string[],
-  refs: string[],
-): SessionMeta {
+/** 从 DB 行投影为 SessionMeta（不含树字段） */
+function rowToSessionMeta(row: Record<string, unknown>): SessionMeta {
   return {
     id: row['id'] as string,
-    parentId: (row['parent_id'] as string) ?? null,
-    children,
-    refs,
     label: row['label'] as string,
-    index: row['index'] as number,
     scope: (row['scope'] as string) ?? null,
     status: row['status'] as 'active' | 'archived',
-    depth: row['depth'] as number,
     turnCount: row['turn_count'] as number,
     metadata: (row['metadata'] as Record<string, unknown>) ?? {},
     tags: (row['tags'] as string[]) ?? [],
     createdAt: (row['created_at'] as Date).toISOString(),
     updatedAt: (row['updated_at'] as Date).toISOString(),
     lastActiveAt: (row['last_active_at'] as Date).toISOString(),
+  }
+}
+
+/** 从 DB 行 + 派生数据投影为 TopologyNode */
+function rowToTopologyNode(
+  row: Record<string, unknown>,
+  children: string[],
+  refs: string[],
+): TopologyNode {
+  return {
+    id: row['id'] as string,
+    parentId: (row['parent_id'] as string) ?? null,
+    children,
+    refs,
+    depth: row['depth'] as number,
+    index: row['index'] as number,
+    label: row['label'] as string,
   }
 }
 
@@ -46,7 +54,7 @@ export class PgSessionTree implements SessionTree {
   ) {}
 
   /** 创建根 Session（不在接口中，创建 space 时调用） */
-  async createRoot(label = 'Root'): Promise<SessionMeta> {
+  async createRoot(label = 'Root'): Promise<TopologyNode> {
     const id = randomUUID()
     const ts = now()
     await this.client.query(
@@ -54,44 +62,31 @@ export class PgSessionTree implements SessionTree {
        VALUES ($1, $2, NULL, $3, 'main', 'active', 0, 0, 0, '{}', '{}', $4, $4, $4)`,
       [id, this.spaceId, label, ts],
     )
-    return {
-      id,
-      parentId: null,
-      children: [],
-      refs: [],
-      label,
-      index: 0,
-      scope: null,
-      status: 'active',
-      depth: 0,
-      turnCount: 0,
-      metadata: {},
-      tags: [],
-      createdAt: ts,
-      updatedAt: ts,
-      lastActiveAt: ts,
-    }
+    return { id, parentId: null, children: [], refs: [], depth: 0, index: 0, label }
   }
 
   /** 创建子 Session */
-  async createChild(options: CreateSessionOptions): Promise<SessionMeta> {
-    const parent = await this.requireSession(options.parentId)
+  async createChild(options: CreateSessionOptions): Promise<TopologyNode> {
+    await this.requireRow(options.parentId)
+    const parentRow = await this.getRow(options.parentId)
+    if (!parentRow) throw new Error(`Session 不存在: ${options.parentId}`)
+
     const id = randomUUID()
     const ts = now()
 
     // 计算在兄弟中的排序
     const { rows: countRows } = await this.client.query(
       'SELECT COUNT(*)::int AS cnt FROM sessions WHERE parent_id = $1 AND space_id = $2',
-      [parent.id, this.spaceId],
+      [options.parentId, this.spaceId],
     )
     const idx = (countRows[0]!['cnt'] as number) ?? 0
+    const depth = (parentRow['depth'] as number) + 1
 
-    const depth = parent.depth + 1
     await this.client.query(
       `INSERT INTO sessions (id, space_id, parent_id, label, role, status, scope, depth, "index", turn_count, tags, metadata, created_at, updated_at, last_active_at)
        VALUES ($1, $2, $3, $4, 'standard', 'active', $5, $6, $7, 0, $8, $9, $10, $10, $10)`,
       [
-        id, this.spaceId, parent.id, options.label,
+        id, this.spaceId, options.parentId, options.label,
         options.scope ?? null, depth, idx,
         options.tags ?? [], JSON.stringify(options.metadata ?? {}),
         ts,
@@ -100,36 +95,20 @@ export class PgSessionTree implements SessionTree {
 
     return {
       id,
-      parentId: parent.id,
+      parentId: options.parentId,
       children: [],
       refs: [],
-      label: options.label,
-      index: idx,
-      scope: options.scope ?? null,
-      status: 'active',
       depth,
-      turnCount: 0,
-      metadata: options.metadata ?? {},
-      tags: options.tags ?? [],
-      createdAt: ts,
-      updatedAt: ts,
-      lastActiveAt: ts,
+      index: idx,
+      label: options.label,
     }
   }
 
-  /** 获取单个 Session（含派生的 children 和 refs） */
+  /** 获取单个 Session 元数据 */
   async get(id: string): Promise<SessionMeta | null> {
-    const { rows } = await this.client.query(
-      'SELECT * FROM sessions WHERE id = $1 AND space_id = $2',
-      [id, this.spaceId],
-    )
-    if (rows.length === 0) return null
-    const row = rows[0]!
-
-    const children = await this.getChildIds(id)
-    const refs = await this.getRefIds(id)
-
-    return rowToCoreSessionMeta(row, children, refs)
+    const row = await this.getRow(id)
+    if (!row) return null
+    return rowToSessionMeta(row)
   }
 
   /** 获取根 Session */
@@ -139,10 +118,7 @@ export class PgSessionTree implements SessionTree {
       [this.spaceId],
     )
     if (rows.length === 0) throw new Error('根 Session 不存在')
-    const row = rows[0]!
-    const children = await this.getChildIds(row['id'] as string)
-    const refs = await this.getRefIds(row['id'] as string)
-    return rowToCoreSessionMeta(row, children, refs)
+    return rowToSessionMeta(rows[0]!)
   }
 
   /** 列出所有 Session */
@@ -151,19 +127,12 @@ export class PgSessionTree implements SessionTree {
       'SELECT * FROM sessions WHERE space_id = $1 ORDER BY created_at ASC',
       [this.spaceId],
     )
-    const result: SessionMeta[] = []
-    for (const row of rows) {
-      const id = row['id'] as string
-      const children = await this.getChildIds(id)
-      const refs = await this.getRefIds(id)
-      result.push(rowToCoreSessionMeta(row, children, refs))
-    }
-    return result
+    return rows.map(row => rowToSessionMeta(row))
   }
 
   /** 归档 Session */
   async archive(id: string): Promise<void> {
-    await this.requireSession(id)
+    await this.requireRow(id)
     await this.client.query(
       `UPDATE sessions SET status = 'archived', updated_at = $1
        WHERE id = $2 AND space_id = $3`,
@@ -174,8 +143,8 @@ export class PgSessionTree implements SessionTree {
   /** 创建跨分支引用 */
   async addRef(fromId: string, toId: string): Promise<void> {
     if (fromId === toId) throw new Error('不能引用自己')
-    await this.requireSession(fromId)
-    await this.requireSession(toId)
+    await this.requireRow(fromId)
+    await this.requireRow(toId)
 
     // 校验：不能引用直系祖先
     const ancestors = await this.getAncestors(fromId)
@@ -201,7 +170,7 @@ export class PgSessionTree implements SessionTree {
     id: string,
     updates: Partial<Pick<SessionMeta, 'label' | 'scope' | 'tags' | 'metadata' | 'turnCount'>>,
   ): Promise<SessionMeta> {
-    const meta = await this.requireSession(id)
+    await this.requireRow(id)
 
     const sets: string[] = ['updated_at = $1']
     const params: unknown[] = [now()]
@@ -240,12 +209,54 @@ export class PgSessionTree implements SessionTree {
     )
 
     // 重新读取
-    const updated = await this.requireSession(id)
-    return updated
+    const row = await this.getRow(id)
+    if (!row) throw new Error(`Session 不存在: ${id}`)
+    return rowToSessionMeta(row)
   }
 
-  /** 获取所有祖先（从父到根） */
-  async getAncestors(id: string): Promise<SessionMeta[]> {
+  /** 获取单个拓扑节点 */
+  async getNode(id: string): Promise<TopologyNode | null> {
+    const row = await this.getRow(id)
+    if (!row) return null
+    const children = await this.getChildIds(id)
+    const refs = await this.getRefIds(id)
+    return rowToTopologyNode(row, children, refs)
+  }
+
+  /** 获取完整递归树 */
+  async getTree(): Promise<SessionTreeNode> {
+    const { rows } = await this.client.query(
+      'SELECT id, parent_id, label, status FROM sessions WHERE space_id = $1 ORDER BY depth ASC, "index" ASC',
+      [this.spaceId],
+    )
+
+    const nodeMap = new Map<string, SessionTreeNode>()
+    let root: SessionTreeNode | null = null
+
+    for (const row of rows) {
+      const node: SessionTreeNode = {
+        id: row['id'] as string,
+        label: row['label'] as string,
+        status: row['status'] as 'active' | 'archived',
+        children: [],
+      }
+      nodeMap.set(node.id, node)
+
+      const parentId = row['parent_id'] as string | null
+      if (parentId === null) {
+        root = node
+      } else {
+        const parent = nodeMap.get(parentId)
+        if (parent) parent.children.push(node)
+      }
+    }
+
+    if (!root) throw new Error('根 Session 不存在')
+    return root
+  }
+
+  /** 获取所有祖先节点（从父到根） */
+  async getAncestors(id: string): Promise<TopologyNode[]> {
     const { rows } = await this.client.query(
       `WITH RECURSIVE ancestors AS (
          SELECT * FROM sessions WHERE id = $1 AND space_id = $2
@@ -256,42 +267,53 @@ export class PgSessionTree implements SessionTree {
       [id, this.spaceId],
     )
 
-    const result: SessionMeta[] = []
+    const result: TopologyNode[] = []
     for (const row of rows) {
       const rid = row['id'] as string
       const children = await this.getChildIds(rid)
       const refs = await this.getRefIds(rid)
-      result.push(rowToCoreSessionMeta(row, children, refs))
+      result.push(rowToTopologyNode(row, children, refs))
     }
     return result
   }
 
   /** 获取同级兄弟节点 */
-  async getSiblings(id: string): Promise<SessionMeta[]> {
-    const meta = await this.requireSession(id)
-    if (meta.parentId === null) return []
+  async getSiblings(id: string): Promise<TopologyNode[]> {
+    const row = await this.getRow(id)
+    if (!row) throw new Error(`Session 不存在: ${id}`)
+    const parentId = row['parent_id'] as string | null
+    if (parentId === null) return []
 
     const { rows } = await this.client.query(
       `SELECT * FROM sessions WHERE parent_id = $1 AND space_id = $2 AND id != $3
        ORDER BY "index" ASC`,
-      [meta.parentId, this.spaceId, id],
+      [parentId, this.spaceId, id],
     )
 
-    const result: SessionMeta[] = []
-    for (const row of rows) {
-      const rid = row['id'] as string
+    const result: TopologyNode[] = []
+    for (const r of rows) {
+      const rid = r['id'] as string
       const children = await this.getChildIds(rid)
       const refs = await this.getRefIds(rid)
-      result.push(rowToCoreSessionMeta(row, children, refs))
+      result.push(rowToTopologyNode(r, children, refs))
     }
     return result
   }
 
-  /** 读取 Session，不存在则抛错 */
-  private async requireSession(id: string): Promise<SessionMeta> {
-    const session = await this.get(id)
-    if (!session) throw new Error(`Session 不存在: ${id}`)
-    return session
+  /** 读取原始 DB 行 */
+  private async getRow(id: string): Promise<Record<string, unknown> | null> {
+    const { rows } = await this.client.query(
+      'SELECT * FROM sessions WHERE id = $1 AND space_id = $2',
+      [id, this.spaceId],
+    )
+    return rows.length > 0 ? rows[0]! : null
+  }
+
+  /** 读取原始 DB 行，不存在则抛错 */
+  private async requireRow(id: string): Promise<Record<string, unknown>> {
+    const row = await this.getRow(id)
+    if (!row) throw new Error(`Session 不存在: ${id}`)
+    return row
   }
 
   /** 获取子 Session ID 列表 */
