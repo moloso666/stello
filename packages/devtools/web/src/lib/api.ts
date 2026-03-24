@@ -127,7 +127,7 @@ export function fetchConfig() {
 
 /** 更新 agent 配置 */
 export function patchConfig(updates: Record<string, unknown>) {
-  return request<{ ok: boolean; applied: string[] }>('/config', {
+  return request<{ ok: boolean; applied: string[]; needsRestart: string[]; note: string }>('/config', {
     method: 'PATCH',
     body: JSON.stringify(updates),
   })

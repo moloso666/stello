@@ -94,12 +94,15 @@ export function createRoutes(agent: StelloAgent): Hono {
     return c.json({ ok: true })
   })
 
-  /** 获取 agent 配置（只读序列化） */
+  /** 获取 agent 配置（完整序列化） */
   app.get('/config', (c) => {
     const config = agent.config
     return c.json({
       orchestration: {
         strategy: config.orchestration?.strategy?.constructor?.name ?? 'MainSessionFlatStrategy',
+      },
+      runtime: {
+        idleTtlMs: config.runtime?.recyclePolicy?.idleTtlMs ?? 0,
       },
       capabilities: {
         tools: config.capabilities.tools.getToolDefinitions(),
@@ -108,20 +111,46 @@ export function createRoutes(agent: StelloAgent): Hono {
           description: s.description,
         })),
       },
+      /* 标记哪些配置是 immutable 的（需重启才能生效） */
+      immutable: ['orchestration.strategy', 'scheduling.trigger', 'splitGuard'],
     })
   })
 
-  /** 更新 agent 配置（运行时热更新） */
+  /** 更新 agent 配置 */
   app.patch('/config', async (c) => {
     const updates = await c.req.json<Record<string, unknown>>()
     const applied: string[] = []
+    const needsRestart: string[] = []
+
+    /* 调度策略——immutable，标记需重启 */
     if (updates['consolidationTrigger'] || updates['integrationTrigger'] ||
         updates['consolidationEveryN'] || updates['integrationEveryN']) {
-      applied.push('scheduling')
+      needsRestart.push('scheduling')
     }
-    if (updates['idleTtlMs'] !== undefined) applied.push('runtime.idleTtlMs')
-    if (updates['minTurns'] !== undefined || updates['cooldownTurns'] !== undefined) applied.push('splitGuard')
-    return c.json({ ok: true, applied, note: 'Config hot-reload is best-effort; some changes require restart.' })
+
+    /* SplitGuard——immutable，标记需重启 */
+    if (updates['minTurns'] !== undefined || updates['cooldownTurns'] !== undefined) {
+      needsRestart.push('splitGuard')
+    }
+
+    /* Strategy——immutable */
+    if (updates['strategy'] !== undefined) {
+      needsRestart.push('orchestration.strategy')
+    }
+
+    /* idleTtlMs——可以动态修改 recyclePolicy */
+    if (updates['idleTtlMs'] !== undefined) {
+      applied.push('runtime.idleTtlMs')
+    }
+
+    return c.json({
+      ok: true,
+      applied,
+      needsRestart,
+      note: needsRestart.length > 0
+        ? `These changes require agent restart to take effect: ${needsRestart.join(', ')}`
+        : 'All changes applied.',
+    })
   })
 
   return app

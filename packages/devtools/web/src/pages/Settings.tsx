@@ -134,12 +134,15 @@ export function SettingsPage() {
       .finally(() => setLoading(false))
   }, [])
 
+  const [saveNote, setSaveNote] = useState('')
+
   /** 保存配置 */
   const handleSave = async () => {
     setSaving(true)
     setSaveStatus('idle')
+    setSaveNote('')
     try {
-      await patchConfig({
+      const result = await patchConfig({
         consolidationTrigger,
         integrationTrigger,
         consolidationEveryN: Number(consolidationEveryN),
@@ -149,8 +152,14 @@ export function SettingsPage() {
         minTurns: Number(minTurns),
         cooldownTurns: Number(cooldownTurns),
       })
-      setSaveStatus('saved')
-      setTimeout(() => setSaveStatus('idle'), 2000)
+      if (result.needsRestart.length > 0) {
+        setSaveStatus('saved')
+        setSaveNote(result.note)
+        setTimeout(() => { setSaveStatus('idle'); setSaveNote('') }, 5000)
+      } else {
+        setSaveStatus('saved')
+        setTimeout(() => setSaveStatus('idle'), 2000)
+      }
     } catch {
       setSaveStatus('error')
       setTimeout(() => setSaveStatus('idle'), 3000)
@@ -164,20 +173,25 @@ export function SettingsPage() {
       {/* Header */}
       <div className="flex items-center justify-between h-13 px-6 border-b border-border shrink-0">
         <h2 className="text-[15px] font-semibold text-text">Settings</h2>
-        <button
-          onClick={handleSave}
-          disabled={saving}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 ${
-            saveStatus === 'saved'
-              ? 'bg-[#E8F5E9] text-success'
-              : saveStatus === 'error'
-                ? 'bg-[#FFEBEE] text-error'
-                : 'bg-primary text-white hover:bg-primary/90'
-          }`}
-        >
-          {saving ? <Loader2 size={12} className="animate-spin" /> : null}
-          {saveStatus === 'saved' ? 'Saved' : saveStatus === 'error' ? 'Error' : 'Save Changes'}
-        </button>
+        <div className="flex items-center gap-3">
+          {saveNote && (
+            <span className="text-[10px] text-warning max-w-xs truncate">{saveNote}</span>
+          )}
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 ${
+              saveStatus === 'saved'
+                ? 'bg-[#E8F5E9] text-success'
+                : saveStatus === 'error'
+                  ? 'bg-[#FFEBEE] text-error'
+                  : 'bg-primary text-white hover:bg-primary/90'
+            }`}
+          >
+            {saving ? <Loader2 size={12} className="animate-spin" /> : null}
+            {saveStatus === 'saved' ? 'Saved' : saveStatus === 'error' ? 'Error' : 'Save Changes'}
+          </button>
+        </div>
       </div>
 
       {/* 可滚动内容 */}
