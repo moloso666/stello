@@ -3,6 +3,7 @@ import { Routes, Route, NavLink, Navigate, useLocation } from 'react-router-dom'
 import { Sparkles, MessageSquare, Search, Activity, Settings } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { connectWs } from '@/lib/ws'
+import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { Topology } from '@/pages/Topology'
 import { Conversation } from '@/pages/Conversation'
 import { Inspector } from '@/pages/Inspector'
@@ -50,7 +51,6 @@ export function App() {
     <div className="flex h-screen w-screen overflow-hidden">
       {/* 侧边栏 */}
       <nav className="flex flex-col items-center w-16 bg-card border-r border-border py-4 gap-2 shrink-0">
-        {/* Logo */}
         <div className="flex items-center justify-center w-9 h-9 bg-primary rounded-[10px] mb-3 shadow-md transition-transform duration-200 hover:scale-110 cursor-pointer">
           <span className="text-white text-lg font-bold">S</span>
         </div>
@@ -59,18 +59,20 @@ export function App() {
         ))}
       </nav>
 
-      {/* 主内容区——用 key 触发页面切换动画 */}
+      {/* 主内容区——ErrorBoundary 包裹，页面崩溃不白屏 */}
       <main className="flex-1 min-w-0 overflow-hidden">
-        <div key={location.pathname} className="h-full page-enter">
-          <Routes location={location}>
-            <Route path="/" element={<Navigate to="/topology" replace />} />
-            <Route path="/topology" element={<Topology />} />
-            <Route path="/conversation" element={<Conversation />} />
-            <Route path="/inspector" element={<Inspector />} />
-            <Route path="/events" element={<Events />} />
-            <Route path="/settings" element={<SettingsPage />} />
-          </Routes>
-        </div>
+        <ErrorBoundary key={location.pathname}>
+          <div className="h-full page-enter">
+            <Routes location={location}>
+              <Route path="/" element={<Navigate to="/topology" replace />} />
+              <Route path="/topology" element={<Topology />} />
+              <Route path="/conversation" element={<Conversation />} />
+              <Route path="/inspector" element={<Inspector />} />
+              <Route path="/events" element={<Events />} />
+              <Route path="/settings" element={<SettingsPage />} />
+            </Routes>
+          </div>
+        </ErrorBoundary>
       </main>
     </div>
   )

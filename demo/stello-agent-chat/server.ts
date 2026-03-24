@@ -1,7 +1,5 @@
 import 'dotenv/config'
-import { createServer } from 'node:http'
-import { readFile } from 'node:fs/promises'
-import { resolve, dirname, extname, normalize } from 'node:path'
+import { dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
   NodeFileSystemAdapter,
@@ -29,9 +27,7 @@ import type { MainSession } from '../../packages/session/src/types/main-session-
 import type { Session } from '../../packages/session/src/types/session-api.ts'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
-const distDir = resolve(__dirname, 'dist')
 const dataDir = './tmp/stello-agent-chat'
-const port = Number(process.env.DEMO_PORT ?? 3477)
 const host = process.env.DEMO_HOST ?? '127.0.0.1'
 
 const openaiApiKey = process.env.OPENAI_API_KEY
@@ -340,40 +336,12 @@ async function bootstrap() {
   }
 }
 
-function json(res: import('node:http').ServerResponse, status: number, body: unknown) {
-  res.statusCode = status
-  res.setHeader('Content-Type', 'application/json; charset=utf-8')
-  res.end(JSON.stringify(body))
-}
-
-async function readJsonBody(req: import('node:http').IncomingMessage) {
-  const chunks: Buffer[] = []
-  for await (const chunk of req) {
-    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk))
-  }
-  if (chunks.length === 0) return {}
-  return JSON.parse(Buffer.concat(chunks).toString('utf8')) as Record<string, unknown>
-}
-
 async function requireCoreSession(sessions: SessionTreeImpl, sessionId: string): Promise<SessionMeta> {
   const session = await sessions.get(sessionId)
   if (!session) {
     throw new Error(`Session not found: ${sessionId}`)
   }
   return session
-}
-
-function toViewSession(meta: SessionMeta) {
-  return {
-    id: meta.id,
-    label: meta.label,
-    parentId: meta.parentId,
-    scope: meta.scope,
-    depth: meta.depth,
-    status: meta.status,
-    turnCount: meta.turnCount,
-    children: meta.children,
-  }
 }
 
 async function main() {
@@ -385,164 +353,14 @@ async function main() {
     return
   }
 
-  /* 启动 DevTools 调试面板 */
-  if (process.env.DEVTOOLS !== '0') {
-    const devtoolsPort = Number(process.env.DEVTOOLS_PORT ?? 4800)
-    startDevtools(app.agent, { port: devtoolsPort, open: false }).then((dt) => {
-      console.log(`Stello DevTools running at http://${host}:${dt.port}`)
-    }).catch((err) => {
-      console.warn('DevTools failed to start:', err instanceof Error ? err.message : err)
-    })
-  }
+  /* 启动 DevTools 调试面板（唯一的 UI 入口） */
+  const devtoolsPort = Number(process.env.DEVTOOLS_PORT ?? 4800)
+  const dt = await startDevtools(app.agent, { port: devtoolsPort, open: true })
 
-  const server = createServer(async (req, res) => {
-    try {
-      if (!req.url) {
-        json(res, 400, { error: 'Missing URL' })
-        return
-      }
-
-      const url = new URL(req.url, `http://${req.headers.host ?? `${host}:${port}`}`)
-      const pathname = url.pathname
-
-      if (req.method === 'GET' && pathname === '/api/state') {
-        const sessions = (await app.sessions.listAll()).map(toViewSession)
-        json(res, 200, {
-          currentSessionId: app.getCurrentSessionId(),
-          sessions,
-        })
-        return
-      }
-
-      if (req.method === 'GET' && pathname.startsWith('/api/sessions/') && pathname.endsWith('/messages')) {
-        const sessionId = pathname.split('/')[3]
-        const entry = app.sessionMap.get(sessionId)
-        if (!entry) {
-          json(res, 404, { error: 'Session not found' })
-          return
-        }
-        const runtime = 'main' in entry && entry.main ? entry.main : entry.session
-        const messages = await runtime.messages()
-        json(res, 200, { sessionId, messages })
-        return
-      }
-
-      if (req.method === 'POST' && pathname.startsWith('/api/sessions/') && pathname.endsWith('/enter')) {
-        const sessionId = pathname.split('/')[3]
-        const bootstrapResult = await app.agent.enterSession(sessionId)
-        app.setCurrentSessionId(sessionId)
-        json(res, 200, bootstrapResult)
-        return
-      }
-
-      if (req.method === 'POST' && pathname.startsWith('/api/sessions/') && pathname.endsWith('/turn')) {
-        const sessionId = pathname.split('/')[3]
-        const body = await readJsonBody(req)
-        const input = String(body.input ?? '')
-        const result = await app.agent.turn(sessionId, input)
-        const entry = app.sessionMap.get(sessionId)
-        if (!entry) {
-          json(res, 404, { error: 'Session not found' })
-          return
-        }
-        const messages = await ('main' in entry && entry.main ? entry.main.messages() : entry.session.messages())
-        json(res, 200, {
-          result,
-          messages,
-        })
-        return
-      }
-
-      if (req.method === 'POST' && pathname.startsWith('/api/sessions/') && pathname.endsWith('/stream')) {
-        const sessionId = pathname.split('/')[3]
-        const body = await readJsonBody(req)
-        const input = String(body.input ?? '')
-        const stream = await app.agent.stream(sessionId, input)
-
-        res.statusCode = 200
-        res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8')
-        res.setHeader('Cache-Control', 'no-cache')
-        res.setHeader('Transfer-Encoding', 'chunked')
-
-        for await (const chunk of stream) {
-          res.write(`${JSON.stringify({ type: 'delta', delta: chunk })}\n`)
-        }
-
-        const result = await stream.result
-        const entry = app.sessionMap.get(sessionId)
-        if (!entry) {
-          res.write(`${JSON.stringify({ type: 'error', error: 'Session not found after stream' })}\n`)
-          res.end()
-          return
-        }
-        const messages = await ('main' in entry && entry.main ? entry.main.messages() : entry.session.messages())
-        res.write(`${JSON.stringify({ type: 'done', result, messages })}\n`)
-        res.end()
-        return
-      }
-
-      if (req.method === 'POST' && pathname.startsWith('/api/sessions/') && pathname.endsWith('/fork')) {
-        const sessionId = pathname.split('/')[3]
-        const body = await readJsonBody(req)
-        const label = String(body.label ?? 'New Session')
-        const scope = body.scope ? String(body.scope) : undefined
-        const child = await app.agent.forkSession(sessionId, { label, scope })
-        json(res, 200, { child })
-        return
-      }
-
-      if (req.method === 'GET') {
-        const requestedPath = pathname === '/' ? '/index.html' : pathname
-        const safePath = normalize(requestedPath).replace(/^(\.\.[/\\])+/, '')
-        const filePath = resolve(distDir, `.${safePath}`)
-        const fallbackHtml = resolve(distDir, 'index.html')
-
-        try {
-          const payload = await readFile(filePath)
-          res.statusCode = 200
-          res.setHeader('Content-Type', contentTypeFor(filePath))
-          res.end(payload)
-          return
-        } catch {
-          if (!extname(pathname)) {
-            const html = await readFile(fallbackHtml)
-            res.statusCode = 200
-            res.setHeader('Content-Type', 'text/html; charset=utf-8')
-            res.end(html)
-            return
-          }
-        }
-      }
-
-      json(res, 404, { error: 'Not found' })
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
-      json(res, 500, { error: message })
-    }
-  })
-
-  server.listen(port, host, () => {
-    console.log(`StelloAgent chat demo running at http://${host}:${port}`)
-    console.log(`Model: ${openaiModel}`)
-    console.log(`Base URL: ${openaiBaseURL}`)
-  })
-}
-
-function contentTypeFor(filePath: string) {
-  switch (extname(filePath)) {
-    case '.html':
-      return 'text/html; charset=utf-8'
-    case '.css':
-      return 'text/css; charset=utf-8'
-    case '.js':
-      return 'application/javascript; charset=utf-8'
-    case '.json':
-      return 'application/json; charset=utf-8'
-    case '.svg':
-      return 'image/svg+xml'
-    default:
-      return 'application/octet-stream'
-  }
+  console.log(`\nStello Agent Demo`)
+  console.log(`  Model:    ${openaiModel}`)
+  console.log(`  Base URL: ${openaiBaseURL}`)
+  console.log(`  DevTools: http://${host}:${dt.port}\n`)
 }
 
 main().catch((error) => {
