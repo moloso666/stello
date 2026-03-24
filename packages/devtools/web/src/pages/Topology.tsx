@@ -1,5 +1,6 @@
 import { useRef, useEffect, useState, useCallback } from 'react'
-import { GitBranch, Archive } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { GitBranch, Archive, MessageSquare, Search, X } from 'lucide-react'
 
 /** 拓扑节点 */
 interface TopoNode {
@@ -251,6 +252,8 @@ export function Topology() {
   const [highlighted, setHighlighted] = useState<string | null>(null)
   const [tooltip, setTooltip] = useState<TooltipState>({ visible: false, x: 0, y: 0, node: null })
   const [selectedNode, setSelectedNode] = useState<LayoutNode | null>(null)
+  const [panelOpen, setPanelOpen] = useState(false)
+  const navigate = useNavigate()
 
   /* ResizeObserver */
   useEffect(() => {
@@ -320,10 +323,17 @@ export function Topology() {
     if (highlighted) {
       const node = nodesRef.current.find((n) => n.id === highlighted)
       setSelectedNode(node ?? null)
+      setPanelOpen(true)
     } else {
-      setSelectedNode(null)
+      setPanelOpen(false)
     }
   }, [highlighted])
+
+  /** 关闭面板 */
+  const closePanel = useCallback(() => {
+    setPanelOpen(false)
+    setTimeout(() => setSelectedNode(null), 250)
+  }, [])
 
   return (
     <div className="flex h-full">
@@ -378,42 +388,79 @@ export function Topology() {
         )}
       </div>
 
-      {/* 右侧信息面板 */}
-      {selectedNode && (
-        <div className="w-72 bg-[#FFFFFF0F] backdrop-blur-md border-l border-[#FFFFFF15] flex flex-col p-5 gap-3.5 shrink-0 panel-enter">
-          <h3 className="text-sm font-semibold text-[#E5E4E1]">
-            Session: {selectedNode.label}
-          </h3>
-          <div className="h-px bg-[#FFFFFF15]" />
-
-          {[
-            { label: 'Status', value: selectedNode.status, color: selectedNode.status === 'active' ? '#C4793D' : '#9C9B99' },
-            { label: 'Turns', value: String(selectedNode.turns), color: '#E5E4E1' },
-            { label: 'L2 Memory', value: 'Available', color: '#C4793D' },
-            { label: 'Children', value: selectedNode.children.length > 0 ? `${selectedNode.children.length} (${selectedNode.children.join(', ')})` : 'None', color: '#E5E4E1' },
-            { label: 'Last Active', value: '2 min ago', color: '#E5E4E1' },
-          ].map(({ label, value, color }) => (
-            <div key={label} className="flex items-center justify-between">
-              <span className="text-[11px] font-medium text-[#9C9B99]">{label}</span>
-              <span className="text-[11px] font-medium" style={{ color }}>{value}</span>
+      {/* 右侧信息面板——CSS transition 平滑展开/收起 */}
+      <div
+        className="shrink-0 overflow-hidden transition-all duration-300 ease-out"
+        style={{ width: panelOpen && selectedNode ? 288 : 0 }}
+      >
+        {selectedNode && (
+          <div className="w-72 h-full bg-[#2A2520] border-l border-[#3D3530] flex flex-col p-5 gap-4">
+            {/* 标题 + 关闭 */}
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-[#F0EDE8]">
+                {selectedNode.label}
+              </h3>
+              <button
+                onClick={closePanel}
+                className="w-6 h-6 flex items-center justify-center rounded-md hover:bg-[#FFFFFF15] transition-colors"
+              >
+                <X size={14} className="text-[#A8A7A5]" />
+              </button>
             </div>
-          ))}
 
-          <div className="h-px bg-[#FFFFFF15]" />
+            <div className="h-px bg-[#3D3530]" />
 
-          {/* 操作按钮 */}
-          <div className="flex gap-2">
-            <button className="flex items-center gap-1 px-3 py-1.5 bg-primary/20 rounded-md hover:bg-primary/30 transition-colors">
-              <GitBranch size={12} className="text-primary" />
-              <span className="text-[11px] font-medium text-primary">Fork</span>
-            </button>
-            <button className="flex items-center gap-1 px-3 py-1.5 bg-[#FFFFFF10] rounded-md hover:bg-[#FFFFFF20] transition-colors">
-              <Archive size={12} className="text-[#9C9B99]" />
-              <span className="text-[11px] font-medium text-[#9C9B99]">Archive</span>
-            </button>
+            {/* 属性行——提高亮度对比 */}
+            {[
+              { label: 'Status', value: selectedNode.status, color: selectedNode.status === 'active' ? '#C4793D' : '#A8A7A5' },
+              { label: 'Turns', value: String(selectedNode.turns), color: '#F0EDE8' },
+              { label: 'L2 Memory', value: 'Available', color: '#C4793D' },
+              { label: 'Children', value: selectedNode.children.length > 0 ? `${selectedNode.children.length} (${selectedNode.children.join(', ')})` : 'None', color: '#F0EDE8' },
+              { label: 'Last Active', value: '2 min ago', color: '#D1CEC8' },
+            ].map(({ label, value, color }) => (
+              <div key={label} className="flex items-center justify-between">
+                <span className="text-xs font-medium text-[#A8A7A5]">{label}</span>
+                <span className="text-xs font-semibold" style={{ color }}>{value}</span>
+              </div>
+            ))}
+
+            <div className="h-px bg-[#3D3530]" />
+
+            {/* 跳转入口 */}
+            <div className="space-y-1.5">
+              <p className="text-[10px] font-semibold text-[#A8A7A5] tracking-wide">OPEN IN</p>
+              <button
+                onClick={() => navigate('/conversation')}
+                className="flex items-center gap-2 w-full px-3 py-2 rounded-lg bg-[#FFFFFF08] hover:bg-[#FFFFFF15] transition-colors"
+              >
+                <MessageSquare size={14} className="text-primary" />
+                <span className="text-xs font-medium text-[#F0EDE8]">Conversation</span>
+              </button>
+              <button
+                onClick={() => navigate('/inspector')}
+                className="flex items-center gap-2 w-full px-3 py-2 rounded-lg bg-[#FFFFFF08] hover:bg-[#FFFFFF15] transition-colors"
+              >
+                <Search size={14} className="text-primary" />
+                <span className="text-xs font-medium text-[#F0EDE8]">Inspector</span>
+              </button>
+            </div>
+
+            <div className="h-px bg-[#3D3530]" />
+
+            {/* 操作按钮 */}
+            <div className="flex gap-2">
+              <button className="flex items-center gap-1.5 px-3 py-2 bg-primary/20 rounded-lg hover:bg-primary/30 transition-colors">
+                <GitBranch size={13} className="text-primary" />
+                <span className="text-xs font-medium text-primary">Fork</span>
+              </button>
+              <button className="flex items-center gap-1.5 px-3 py-2 bg-[#FFFFFF10] rounded-lg hover:bg-[#FFFFFF20] transition-colors">
+                <Archive size={13} className="text-[#A8A7A5]" />
+                <span className="text-xs font-medium text-[#A8A7A5]">Archive</span>
+              </button>
+            </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   )
 }
