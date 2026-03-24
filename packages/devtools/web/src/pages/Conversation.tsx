@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import {
   Search,
@@ -59,7 +59,25 @@ export function Conversation() {
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const nextIdRef = useRef(100)
 
-  /* 从 API 拉取 session 列表 */
+  /** 拉取 session 列表 */
+  const refreshSessions = useCallback(() => {
+    fetchSessions()
+      .then(({ sessions: list }) => {
+        const all = list.map((s, i) => ({
+          id: s.id,
+          label: s.label,
+          turns: s.turnCount ?? 0,
+          status: s.status,
+          color: i === 0 ? '#C4A882' : s.status === 'archived' ? '#D89575' : '#B8956A',
+        }))
+        setSessions(all)
+        setLoadError(null)
+        return all
+      })
+      .catch((err: Error) => setLoadError(err.message))
+  }, [])
+
+  /* 初始加载 */
   useEffect(() => {
     fetchSessions()
       .then(({ sessions: list }) => {
@@ -78,6 +96,18 @@ export function Conversation() {
       .catch((err: Error) => setLoadError(err.message))
     fetchConfig().then(setConfig).catch(() => {})
   }, [])
+
+  /* 监听 WS 事件——fork/archive 时刷新列表 + 10s 轮询兜底 */
+  useEffect(() => {
+    const unsub = subscribeWs((msg) => {
+      const type = msg['type'] as string
+      if (type === 'session.forked' || type === 'session.left') {
+        refreshSessions()
+      }
+    })
+    const timer = setInterval(refreshSessions, 5_000)
+    return () => { unsub(); clearInterval(timer) }
+  }, [refreshSessions])
 
   /* 切换 session 时拉取 detail（L2/scope）+ 历史 records */
   useEffect(() => {
@@ -126,8 +156,11 @@ export function Conversation() {
       const result = await sendTurn(selectedSession.id, text)
       const response = result?.turn?.finalContent ?? result?.turn?.rawResponse ?? JSON.stringify(result)
       setMessages((prev) => [...prev, { id: botId, role: 'assistant', content: response }])
-      /* 刷新 detail（可能有新的 L2/records） */
-      fetchSessionDetail(selectedSession.id).then(setDetail).catch(() => {})
+      /* 刷新 detail 和 session 列表（延迟确保 afterTurn hook 完成） */
+      setTimeout(() => {
+        fetchSessionDetail(selectedSession.id).then(setDetail).catch(() => {})
+        refreshSessions()
+      }, 500)
     } catch (err) {
       setMessages((prev) => [...prev, {
         id: botId,
