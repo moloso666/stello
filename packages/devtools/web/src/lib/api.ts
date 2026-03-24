@@ -16,21 +16,11 @@ export interface SessionMeta {
   lastActiveAt: string
 }
 
-/** 拓扑节点 */
-export interface TopologyNode {
-  id: string
-  parentId: string | null
-  children: string[]
-  refs: string[]
-  depth: number
-  index: number
-  label: string
-}
-
-/** 递归树节点 */
+/** 递归树节点（和 core 的 SessionTreeNode 一致） */
 export interface SessionTreeNode {
-  node: TopologyNode
-  meta: SessionMeta
+  id: string
+  label: string
+  status: 'active' | 'archived'
   children: SessionTreeNode[]
 }
 
@@ -95,11 +85,6 @@ export function fetchSessions() {
 /** 获取单个 session 元数据 */
 export function fetchSession(id: string) {
   return request<SessionMeta>(`/sessions/${id}`)
-}
-
-/** 获取拓扑节点 */
-export function fetchNode(id: string) {
-  return request<TopologyNode>(`/sessions/${id}/node`)
 }
 
 /** 获取 session 详细数据 */

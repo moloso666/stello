@@ -1,7 +1,7 @@
 import { useRef, useEffect, useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { GitBranch, Archive, MessageSquare, Search, X } from 'lucide-react'
-import { fetchSessions, type SessionMeta, type TopologyNode as ApiTopoNode } from '@/lib/api'
+import { fetchSessionTree, type SessionTreeNode } from '@/lib/api'
 
 /** 拓扑节点（前端渲染用，合并 meta + topology） */
 interface TopoNode {
@@ -281,27 +281,28 @@ export function Topology() {
 
   /* 从 API 拉取完整拓扑树 */
   useEffect(() => {
-    import('@/lib/api').then(({ fetchSessionTree }) =>
-      fetchSessionTree().then((tree) => {
-        const flattenTree = (node: typeof tree): TopoNode[] => {
+    fetchSessionTree()
+      .then((tree) => {
+        /** 递归展平树，推导 parentId 和 children ids */
+        const flatten = (node: SessionTreeNode, parentId: string | null): TopoNode[] => {
           const topo: TopoNode = {
-            id: node.node.id,
-            label: node.node.label,
-            parentId: node.node.parentId,
-            status: node.meta.status,
-            turns: node.meta.turnCount,
-            children: node.node.children,
-            refs: node.node.refs,
+            id: node.id,
+            label: node.label,
+            parentId,
+            status: node.status,
+            turns: 0, // tree 没有 turnCount，后续从 detail 补充
+            children: node.children.map((c) => c.id),
+            refs: [],
           }
-          return [topo, ...node.children.flatMap(flattenTree)]
+          return [topo, ...node.children.flatMap((c) => flatten(c, node.id))]
         }
-        const all = flattenTree(tree)
+        const all = flatten(tree, null)
         setTopoNodes(all)
         setDataError(null)
-      }).catch((err: Error) => {
+      })
+      .catch((err: Error) => {
         setDataError(err.message)
       })
-    )
   }, [])
 
   /* ResizeObserver */

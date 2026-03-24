@@ -9,7 +9,7 @@ import {
   ArrowDownRight,
   Loader2,
 } from 'lucide-react'
-import { fetchSessions, fetchConfig, fetchSessionDetail, sendTurn, enterSession, type SessionMeta, type AgentConfig, type TurnResult } from '@/lib/api'
+import { fetchSessions, fetchConfig, fetchSessionDetail, sendTurn, enterSession, type AgentConfig } from '@/lib/api'
 import { sendWs, subscribeWs } from '@/lib/ws'
 
 /** Session 列表项 */
