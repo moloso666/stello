@@ -13,7 +13,7 @@ import {
   Pencil,
   Loader2,
 } from 'lucide-react'
-import { fetchConfig } from '@/lib/api'
+import { fetchConfig, patchConfig } from '@/lib/api'
 
 /** 从 API 获取的 agent 配置 */
 interface AgentConfig {
@@ -53,23 +53,30 @@ function Row({
   )
 }
 
-/** 下拉选择器样式 */
-function Select({ value, options }: { value: string; options: string[] }) {
+/** 下拉选择器（真正可交互） */
+function Select({ value, options, onChange }: { value: string; options: string[]; onChange?: (v: string) => void }) {
   return (
-    <div className="flex items-center gap-1 px-2.5 py-1 bg-surface rounded-md border border-border text-xs font-medium text-text cursor-pointer">
-      <span>{value}</span>
-      <ChevronDown size={10} className="text-text-muted" />
-    </div>
+    <select
+      value={value}
+      onChange={(e) => onChange?.(e.target.value)}
+      className="px-2.5 py-1 bg-surface rounded-md border border-border text-xs font-medium text-text cursor-pointer outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20 transition-colors appearance-none pr-6"
+      style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%239C9B99' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 8px center' }}
+    >
+      {options.map((opt) => <option key={opt} value={opt}>{opt}</option>)}
+    </select>
   )
 }
 
-/** 数值输入框 */
-function NumberInput({ value, unit }: { value: string; unit?: string }) {
+/** 数值输入框（真正可编辑） */
+function NumberInput({ value, unit, onChange }: { value: string; unit?: string; onChange?: (v: string) => void }) {
   return (
     <div className="flex items-center gap-1">
-      <div className="w-15 px-2.5 py-1 bg-surface rounded-md border border-border text-xs font-medium text-text text-center">
-        {value}
-      </div>
+      <input
+        type="number"
+        value={value}
+        onChange={(e) => onChange?.(e.target.value)}
+        className="w-16 px-2.5 py-1 bg-surface rounded-md border border-border text-xs font-medium text-text text-center outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20 transition-colors"
+      />
       {unit && <span className="text-[11px] text-text-muted">{unit}</span>}
     </div>
   )
@@ -104,19 +111,73 @@ function Tag({ children, variant = 'default' }: { children: string; variant?: 'd
 export function SettingsPage() {
   const [config, setConfig] = useState<AgentConfig | null>(null)
   const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saved' | 'error'>('idle')
+
+  /* 可编辑配置值 */
+  const [consolidationTrigger, setConsolidationTrigger] = useState('onSwitch')
+  const [integrationTrigger, setIntegrationTrigger] = useState('afterConsolidate')
+  const [consolidationEveryN, setConsolidationEveryN] = useState('5')
+  const [integrationEveryN, setIntegrationEveryN] = useState('3')
+  const [idleTtlMs, setIdleTtlMs] = useState('30000')
+  const [strategy, setStrategy] = useState('MainSessionFlat')
+  const [minTurns, setMinTurns] = useState('3')
+  const [cooldownTurns, setCooldownTurns] = useState('5')
 
   useEffect(() => {
     fetchConfig()
-      .then(setConfig)
-      .catch(() => { /* dev mode — API 可能不可用 */ })
+      .then((c) => {
+        setConfig(c)
+        if (c.orchestration.strategy) setStrategy(c.orchestration.strategy)
+      })
+      .catch(() => {})
       .finally(() => setLoading(false))
   }, [])
+
+  /** 保存配置 */
+  const handleSave = async () => {
+    setSaving(true)
+    setSaveStatus('idle')
+    try {
+      await patchConfig({
+        consolidationTrigger,
+        integrationTrigger,
+        consolidationEveryN: Number(consolidationEveryN),
+        integrationEveryN: Number(integrationEveryN),
+        idleTtlMs: Number(idleTtlMs),
+        strategy,
+        minTurns: Number(minTurns),
+        cooldownTurns: Number(cooldownTurns),
+      })
+      setSaveStatus('saved')
+      setTimeout(() => setSaveStatus('idle'), 2000)
+    } catch {
+      setSaveStatus('error')
+      setTimeout(() => setSaveStatus('idle'), 3000)
+    } finally {
+      setSaving(false)
+    }
+  }
 
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="flex items-center h-13 px-6 border-b border-border shrink-0">
+      <div className="flex items-center justify-between h-13 px-6 border-b border-border shrink-0">
         <h2 className="text-[15px] font-semibold text-text">Settings</h2>
+        <button
+          onClick={handleSave}
+          disabled={saving}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 ${
+            saveStatus === 'saved'
+              ? 'bg-[#E8F5E9] text-success'
+              : saveStatus === 'error'
+                ? 'bg-[#FFEBEE] text-error'
+                : 'bg-primary text-white hover:bg-primary/90'
+          }`}
+        >
+          {saving ? <Loader2 size={12} className="animate-spin" /> : null}
+          {saveStatus === 'saved' ? 'Saved' : saveStatus === 'error' ? 'Error' : 'Save Changes'}
+        </button>
       </div>
 
       {/* 可滚动内容 */}
@@ -157,10 +218,10 @@ export function SettingsPage() {
         {/* Scheduling Policy */}
         <Card title="Scheduling Policy">
           <Row label="Consolidation Trigger">
-            <Select value="onSwitch" options={['manual', 'everyNTurns', 'onSwitch', 'onArchive', 'onLeave']} />
+            <Select value={consolidationTrigger} options={['manual', 'everyNTurns', 'onSwitch', 'onArchive', 'onLeave']} onChange={setConsolidationTrigger} />
           </Row>
           <Row label="Integration Trigger">
-            <Select value="afterConsolidate" options={['manual', 'afterConsolidate', 'everyNTurns', 'onSwitch', 'onArchive', 'onLeave']} />
+            <Select value={integrationTrigger} options={['manual', 'afterConsolidate', 'everyNTurns', 'onSwitch', 'onArchive', 'onLeave']} onChange={setIntegrationTrigger} />
           </Row>
           <Row label="System Prompt">
             <div className="flex items-center gap-1 px-2.5 py-1 bg-primary-light rounded-md cursor-pointer">
@@ -169,33 +230,30 @@ export function SettingsPage() {
             </div>
           </Row>
           <Row label="Consolidation Every N Turns">
-            <NumberInput value="5" />
+            <NumberInput value={consolidationEveryN} onChange={setConsolidationEveryN} />
           </Row>
           <Row label="Integration Every N Turns">
-            <NumberInput value="3" />
+            <NumberInput value={integrationEveryN} onChange={setIntegrationEveryN} />
           </Row>
         </Card>
 
         {/* Runtime & Orchestration */}
         <Card title="Runtime & Orchestration">
           <Row label="Idle Recycle Delay">
-            <NumberInput value="30000" unit="ms" />
+            <NumberInput value={idleTtlMs} unit="ms" onChange={setIdleTtlMs} />
           </Row>
           <Row label="Orchestration Strategy">
-            <Select
-              value={config?.orchestration.strategy ?? 'MainSessionFlat'}
-              options={['MainSessionFlat', 'HierarchicalOkr']}
-            />
+            <Select value={strategy} options={['MainSessionFlat', 'HierarchicalOkr']} onChange={setStrategy} />
           </Row>
         </Card>
 
         {/* Split Guard */}
         <Card title="Split Guard">
           <Row label="Min Turns Before Split">
-            <NumberInput value="3" />
+            <NumberInput value={minTurns} onChange={setMinTurns} />
           </Row>
           <Row label="Cooldown Turns">
-            <NumberInput value="5" />
+            <NumberInput value={cooldownTurns} onChange={setCooldownTurns} />
           </Row>
         </Card>
 

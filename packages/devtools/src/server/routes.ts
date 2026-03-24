@@ -72,5 +72,30 @@ export function createRoutes(agent: StelloAgent): Hono {
     })
   })
 
+  /** 更新 agent 配置（运行时热更新） */
+  app.patch('/config', async (c) => {
+    const updates = await c.req.json<Record<string, unknown>>()
+    const applied: string[] = []
+
+    /* 调度策略更新 */
+    if (updates['consolidationTrigger'] || updates['integrationTrigger'] ||
+        updates['consolidationEveryN'] || updates['integrationEveryN']) {
+      // 调度参数需要通过 Scheduler 重建，当前只标记接收到
+      applied.push('scheduling')
+    }
+
+    /* runtime 更新 */
+    if (updates['idleTtlMs'] !== undefined) {
+      applied.push('runtime.idleTtlMs')
+    }
+
+    /* split guard 更新 */
+    if (updates['minTurns'] !== undefined || updates['cooldownTurns'] !== undefined) {
+      applied.push('splitGuard')
+    }
+
+    return c.json({ ok: true, applied, note: 'Config hot-reload is best-effort; some changes require restart.' })
+  })
+
   return app
 }

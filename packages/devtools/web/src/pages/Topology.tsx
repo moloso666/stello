@@ -476,6 +476,16 @@ export function Topology() {
     cam.y = mouseY / newZoom - wy
   }, [])
 
+  /* 双击节点跳转 Conversation */
+  const handleDoubleClick = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+    const rect = canvasRef.current?.getBoundingClientRect()
+    if (!rect) return
+    const hit = hitTest(e.clientX - rect.left, e.clientY - rect.top)
+    if (hit) {
+      navigate(`/conversation?session=${hit.id}`)
+    }
+  }, [hitTest, navigate])
+
   /** 关闭面板 */
   const closePanel = useCallback(() => {
     setPanelOpen(false)
@@ -494,6 +504,7 @@ export function Topology() {
           onMouseUp={handleMouseUp}
           onMouseLeave={handleMouseUp}
           onWheel={handleWheel}
+          onDoubleClick={handleDoubleClick}
         />
 
         {/* 顶部标题栏 */}

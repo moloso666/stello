@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import {
   Search,
   Zap,
@@ -80,6 +81,8 @@ function RoleBadge({ role }: { role: 'user' | 'asst' | 'tool' }) {
 
 /** Conversation 对话栏页面 */
 export function Conversation() {
+  const [searchParams] = useSearchParams()
+  const initialSessionId = searchParams.get('session')
   const [sessions, setSessions] = useState(mockSessions)
   const [selectedSession, setSelectedSession] = useState(mockSessions[0]!)
   const [messages, setMessages] = useState<ChatMessage[]>(mockMessages)
@@ -103,7 +106,8 @@ export function Conversation() {
         }))
         if (all.length > 0) {
           setSessions(all)
-          setSelectedSession(all[0]!)
+          const target = initialSessionId ? all.find((s) => s.id === initialSessionId) : null
+          setSelectedSession(target ?? all[0]!)
         }
       })
       .catch(() => {})
