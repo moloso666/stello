@@ -133,3 +133,12 @@ export type {
 // 导出辅助函数
 export { toVisualizerFormat } from './utils/export';
 export type { VisualizerNode } from './utils/export';
+
+// 导出 LLM 默认实现
+export {
+  createDefaultConsolidateFn,
+  createDefaultIntegrateFn,
+  DEFAULT_CONSOLIDATE_PROMPT,
+  DEFAULT_INTEGRATE_PROMPT,
+} from './llm/defaults';
+export type { LLMCallFn } from './llm/defaults';

@@ -15,6 +15,11 @@ import {
   type SessionTree,
   type StelloAgentConfig,
   type TurnRecord,
+  createDefaultConsolidateFn,
+  createDefaultIntegrateFn,
+  DEFAULT_CONSOLIDATE_PROMPT,
+  DEFAULT_INTEGRATE_PROMPT,
+  type LLMCallFn,
 } from '../../packages/core/src/index'
 import { startDevtools } from '../../packages/devtools/src/index'
 import {
@@ -155,6 +160,12 @@ async function bootstrap() {
     baseURL: openaiBaseURL,
     model: openaiModel,
   })
+
+  /* LLM 调用函数——复用 session 的 adapter 给 consolidation/integration 用 */
+  const llmCall: LLMCallFn = async (messages) => {
+    const result = await llm.complete(messages.map((m) => ({ role: m.role as 'user' | 'assistant' | 'system', content: m.content })))
+    return result.content
+  }
 
   const sessionStorage = new InMemoryStorageAdapter()
   const sessionMap = new Map<string, WrappedSession | WrappedMainSession>()
@@ -314,20 +325,9 @@ async function bootstrap() {
         return wrapSession(sessionId, entry.session)
       },
       mainSessionResolver: async () => mainSession,
-      consolidateFn: async (_currentMemory, messages) => {
-        const tail = messages.slice(-6)
-        return tail.map((m) => `${m.role}: ${m.content}`).join('\n')
-      },
-      integrateFn: async (children, currentSynthesis) => {
-        const synthesisLines = [
-          currentSynthesis ?? 'Current synthesis: none',
-          ...children.map((child) => `- ${child.label}: ${child.l2}`),
-        ]
-        return {
-          synthesis: synthesisLines.join('\n'),
-          insights: [],
-        }
-      },
+      /* LLM 驱动的 consolidation 和 integration */
+      consolidateFn: createDefaultConsolidateFn(DEFAULT_CONSOLIDATE_PROMPT, llmCall),
+      integrateFn: createDefaultIntegrateFn(DEFAULT_INTEGRATE_PROMPT, llmCall),
     },
     capabilities: {
       lifecycle,
