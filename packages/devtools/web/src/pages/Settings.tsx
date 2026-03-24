@@ -11,7 +11,9 @@ import {
   Webhook,
   ChevronDown,
   Pencil,
+  Loader2,
 } from 'lucide-react'
+import { fetchConfig } from '@/lib/api'
 
 /** 从 API 获取的 agent 配置 */
 interface AgentConfig {
@@ -101,14 +103,13 @@ function Tag({ children, variant = 'default' }: { children: string; variant?: 'd
 /** Settings 配置页面 */
 export function SettingsPage() {
   const [config, setConfig] = useState<AgentConfig | null>(null)
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    fetch('/api/config')
-      .then((r) => r.json())
+    fetchConfig()
       .then(setConfig)
-      .catch(() => {
-        /* 开发模式下 API 可能不可用 */
-      })
+      .catch(() => { /* dev mode — API 可能不可用 */ })
+      .finally(() => setLoading(false))
   }, [])
 
   return (

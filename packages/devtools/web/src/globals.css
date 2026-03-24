@@ -29,3 +29,39 @@ body {
   color: var(--color-text);
   margin: 0;
 }
+
+/* 全局平滑滚动 */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border) transparent;
+}
+
+/* 页面切换淡入 */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.page-enter {
+  animation: fadeIn 0.2s ease-out;
+}
+
+/* 面板滑入 */
+@keyframes slideInRight {
+  from { opacity: 0; transform: translateX(12px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+.panel-enter {
+  animation: slideInRight 0.2s ease-out;
+}
+
+/* 淡入弹出 */
+@keyframes popIn {
+  from { opacity: 0; transform: scale(0.96); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.pop-enter {
+  animation: popIn 0.15s ease-out;
+}

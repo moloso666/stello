@@ -95,9 +95,10 @@ export function Events() {
           return (
             <div
               key={event.id}
-              className={`flex items-center gap-4 px-6 py-3 border-b border-border/30 ${
-                isError ? 'bg-[#FFF5F5]' : i % 2 === 1 ? 'bg-card' : ''
+              className={`flex items-center gap-4 px-6 py-3 border-b border-border/30 transition-all duration-200 hover:bg-muted/50 cursor-pointer page-enter ${
+                isError ? 'bg-[#FFF5F5] hover:bg-[#FFF0F0]' : i % 2 === 1 ? 'bg-card' : ''
               }`}
+              style={{ animationDelay: `${i * 30}ms`, animationFillMode: 'both' }}
             >
               <span className="text-[11px] font-medium text-text-muted w-15 shrink-0">
                 {event.time}

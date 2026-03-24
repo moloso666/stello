@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import {
   Search,
   Zap,
@@ -79,6 +79,13 @@ function RoleBadge({ role }: { role: 'user' | 'asst' | 'tool' }) {
 export function Conversation() {
   const [selectedSession, setSelectedSession] = useState(mockSessions[0]!)
   const [activeTab, setActiveTab] = useState<'l3' | 'l2' | 'insights' | 'prompt'>('l3')
+  const [inputValue, setInputValue] = useState('')
+  const messagesEndRef = useRef<HTMLDivElement>(null)
+
+  /* 消息列表自动滚到底部 */
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [selectedSession])
 
   return (
     <div className="flex h-full">
@@ -149,21 +156,25 @@ export function Conversation() {
 
         {/* 消息流 */}
         <div className="flex-1 overflow-y-auto bg-surface px-6 py-5 space-y-4">
-          {mockMessages.map((msg) => (
-            <div key={msg.id}>
+          {mockMessages.map((msg, i) => (
+            <div
+              key={msg.id}
+              className="page-enter"
+              style={{ animationDelay: `${i * 50}ms`, animationFillMode: 'both' }}
+            >
               {msg.role === 'user' ? (
                 <div className="flex justify-end">
-                  <div className="bg-primary text-white rounded-xl rounded-br-sm px-3.5 py-2.5 max-w-md">
+                  <div className="bg-primary text-white rounded-xl rounded-br-sm px-3.5 py-2.5 max-w-md transition-shadow hover:shadow-lg">
                     <p className="text-[13px] leading-relaxed">{msg.content}</p>
                   </div>
                 </div>
               ) : (
                 <div className="space-y-2">
-                  <div className="bg-card rounded-xl rounded-bl-sm px-3.5 py-2.5 max-w-lg shadow-sm border border-border/30">
+                  <div className="bg-card rounded-xl rounded-bl-sm px-3.5 py-2.5 max-w-lg shadow-sm border border-border/30 transition-shadow hover:shadow-md">
                     <p className="text-[13px] text-text leading-relaxed whitespace-pre-line">{msg.content}</p>
                   </div>
                   {msg.toolCall && (
-                    <div className="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-[#FFF5EE] rounded-lg border border-primary/20">
+                    <div className="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-[#FFF5EE] rounded-lg border border-primary/20 transition-all hover:bg-[#FFF0E5] hover:shadow-sm cursor-pointer">
                       <Terminal size={12} className="text-primary" />
                       <span className="text-[11px] font-medium text-primary-dark">
                         {msg.toolCall.name}({msg.toolCall.args})
@@ -175,19 +186,29 @@ export function Conversation() {
               )}
             </div>
           ))}
+          <div ref={messagesEndRef} />
         </div>
 
         {/* 输入栏 */}
         <div className="flex items-center gap-2.5 h-14 px-5 border-t border-border bg-card shrink-0">
-          <div className="flex items-center gap-2 flex-1 h-9 px-3 bg-surface rounded-[10px] border border-border">
+          <div className="flex items-center gap-2 flex-1 h-9 px-3 bg-surface rounded-[10px] border border-border transition-all duration-200 focus-within:border-primary/50 focus-within:ring-2 focus-within:ring-primary/10">
             <Terminal size={14} className="text-text-muted shrink-0" />
             <input
               type="text"
+              value={inputValue}
+              onChange={(e) => setInputValue(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter' && inputValue.trim()) setInputValue('') }}
               placeholder="Send a message or simulate a tool call..."
               className="flex-1 bg-transparent text-xs outline-none placeholder:text-text-muted"
             />
           </div>
-          <button className="w-9 h-9 bg-primary rounded-lg flex items-center justify-center hover:bg-primary/90 transition-colors">
+          <button
+            className={`w-9 h-9 rounded-lg flex items-center justify-center transition-all duration-200 ${
+              inputValue.trim()
+                ? 'bg-primary hover:bg-primary/90 scale-100 shadow-md'
+                : 'bg-primary/40 scale-95'
+            }`}
+          >
             <ArrowUp size={16} className="text-white" />
           </button>
         </div>

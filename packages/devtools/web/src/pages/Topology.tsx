@@ -109,13 +109,26 @@ function computeLayout(nodes: TopoNode[], width: number, height: number): Layout
   return result
 }
 
-/** 渲染一帧 */
+/** 判断节点是否与 highlightedId 相邻 */
+function isAdjacent(node: LayoutNode, highlightedId: string | null, nodeMap: Map<string, LayoutNode>): boolean {
+  if (!highlightedId) return false
+  if (node.id === highlightedId) return true
+  if (node.parentId === highlightedId) return true
+  const highlighted = nodeMap.get(highlightedId)
+  if (highlighted?.parentId === node.id) return true
+  if (node.refs.includes(highlightedId)) return true
+  if (highlighted?.refs.includes(node.id)) return true
+  return false
+}
+
+/** 渲染一帧（带动画时间） */
 function renderFrame(
   ctx: CanvasRenderingContext2D,
   nodes: LayoutNode[],
   width: number,
   height: number,
   highlightedId: string | null,
+  time: number = 0,
 ) {
   const dpr = window.devicePixelRatio || 1
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
@@ -128,6 +141,7 @@ function renderFrame(
   ctx.fillRect(0, 0, width, height)
 
   const nodeMap = new Map(nodes.map((n) => [n.id, n]))
+  const hasHighlight = highlightedId !== null
 
   /* 画父子连线 */
   for (const node of nodes) {
@@ -135,13 +149,19 @@ function renderFrame(
     const parent = nodeMap.get(node.parentId)
     if (!parent) continue
 
+    const adjacent = hasHighlight && (
+      isAdjacent(node, highlightedId, nodeMap) && isAdjacent(parent, highlightedId, nodeMap)
+    )
+
     ctx.beginPath()
     ctx.moveTo(parent.x, parent.y)
     ctx.lineTo(node.x, node.y)
-    ctx.strokeStyle = 'rgba(196,168,130,0.5)'
-    ctx.lineWidth = parent.parentId === null ? 2.5 : 1.5
-    ctx.shadowColor = 'rgba(196,168,130,0.25)'
-    ctx.shadowBlur = 8
+    ctx.strokeStyle = adjacent
+      ? 'rgba(196,168,130,0.8)'
+      : hasHighlight ? 'rgba(196,168,130,0.15)' : 'rgba(196,168,130,0.5)'
+    ctx.lineWidth = adjacent ? 3 : parent.parentId === null ? 2.5 : 1.5
+    ctx.shadowColor = adjacent ? 'rgba(196,168,130,0.5)' : 'rgba(196,168,130,0.25)'
+    ctx.shadowBlur = adjacent ? 12 : 8
     ctx.stroke()
     ctx.shadowBlur = 0
   }
@@ -151,14 +171,21 @@ function renderFrame(
     for (const refId of node.refs) {
       const ref = nodeMap.get(refId)
       if (!ref) continue
+
+      const adjacent = hasHighlight && (
+        isAdjacent(node, highlightedId, nodeMap) && isAdjacent(ref, highlightedId, nodeMap)
+      )
+
       ctx.beginPath()
       ctx.moveTo(node.x, node.y)
       ctx.lineTo(ref.x, ref.y)
-      ctx.strokeStyle = 'rgba(216,149,117,0.5)'
-      ctx.lineWidth = 1.5
+      ctx.strokeStyle = adjacent
+        ? 'rgba(216,149,117,0.8)'
+        : hasHighlight ? 'rgba(216,149,117,0.12)' : 'rgba(216,149,117,0.5)'
+      ctx.lineWidth = adjacent ? 2 : 1.5
       ctx.setLineDash([6, 4])
       ctx.shadowColor = 'rgba(216,149,117,0.2)'
-      ctx.shadowBlur = 6
+      ctx.shadowBlur = adjacent ? 10 : 6
       ctx.stroke()
       ctx.setLineDash([])
       ctx.shadowBlur = 0
@@ -168,24 +195,41 @@ function renderFrame(
   /* 画节点 */
   for (const node of nodes) {
     const isHighlighted = node.id === highlightedId
+    const adjacent = isAdjacent(node, highlightedId, nodeMap)
+    const dimmed = hasHighlight && !adjacent
+
+    /* 呼吸脉冲：每个节点错开相位 */
+    const pulse = Math.sin(time * 0.002 + node.x * 0.01 + node.y * 0.01) * 0.15 + 1
+    const animatedSize = node.size * (isHighlighted ? 1.2 : pulse)
 
     /* 发光效果 */
     ctx.beginPath()
-    ctx.arc(node.x, node.y, node.size, 0, Math.PI * 2)
+    ctx.arc(node.x, node.y, animatedSize, 0, Math.PI * 2)
     ctx.fillStyle = node.color
-    ctx.globalAlpha = node.brightness
+    ctx.globalAlpha = dimmed ? 0.25 : node.brightness
     ctx.shadowColor = node.glowColor
-    ctx.shadowBlur = isHighlighted ? 30 : node.size + 8
+    ctx.shadowBlur = isHighlighted ? 35 : dimmed ? 4 : node.size + 8
     ctx.fill()
     ctx.shadowBlur = 0
+
+    /* 高亮光环 */
+    if (isHighlighted) {
+      ctx.beginPath()
+      ctx.arc(node.x, node.y, animatedSize + 4, 0, Math.PI * 2)
+      ctx.strokeStyle = node.color
+      ctx.lineWidth = 1.5
+      ctx.globalAlpha = 0.4 + Math.sin(time * 0.005) * 0.2
+      ctx.stroke()
+    }
+
     ctx.globalAlpha = 1
 
     /* 节点标签 */
     ctx.font = `${node.parentId === null ? '600' : '500'} ${node.parentId === null ? 11 : 9}px Outfit, system-ui`
     ctx.fillStyle = node.color
-    ctx.globalAlpha = node.status === 'archived' ? 0.5 : 0.8
+    ctx.globalAlpha = dimmed ? 0.2 : node.status === 'archived' ? 0.5 : 0.8
     ctx.textAlign = 'left'
-    ctx.fillText(node.label, node.x + node.size + 6, node.y + 4)
+    ctx.fillText(node.label, node.x + animatedSize + 6, node.y + 4)
     ctx.globalAlpha = 1
   }
 }
@@ -221,7 +265,13 @@ export function Topology() {
     return () => observer.disconnect()
   }, [])
 
-  /* 布局 + 渲染 */
+  /* 布局计算 */
+  useEffect(() => {
+    const layout = computeLayout(mockNodes, size.width, size.height)
+    nodesRef.current = layout
+  }, [size])
+
+  /* rAF 动画循环 */
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
@@ -232,9 +282,13 @@ export function Topology() {
     canvas.width = size.width * dpr
     canvas.height = size.height * dpr
 
-    const layout = computeLayout(mockNodes, size.width, size.height)
-    nodesRef.current = layout
-    renderFrame(ctx, layout, size.width, size.height, highlighted)
+    let rafId: number
+    const loop = (time: number) => {
+      renderFrame(ctx, nodesRef.current, size.width, size.height, highlighted, time)
+      rafId = requestAnimationFrame(loop)
+    }
+    rafId = requestAnimationFrame(loop)
+    return () => cancelAnimationFrame(rafId)
   }, [size, highlighted])
 
   /* 鼠标交互 */
@@ -313,7 +367,7 @@ export function Topology() {
         {/* Tooltip */}
         {tooltip.visible && tooltip.node && (
           <div
-            className="fixed z-50 pointer-events-none bg-[#2A2520]/95 backdrop-blur-sm rounded-lg border border-[#C4A88230] px-3 py-2 shadow-lg"
+            className="fixed z-50 pointer-events-none bg-[#2A2520]/95 backdrop-blur-sm rounded-lg border border-[#C4A88230] px-3 py-2 shadow-lg pop-enter"
             style={{ left: tooltip.x + 12, top: tooltip.y - 8 }}
           >
             <p className="text-xs font-semibold text-[#E5E4E1]">{tooltip.node.label}</p>
@@ -326,7 +380,7 @@ export function Topology() {
 
       {/* 右侧信息面板 */}
       {selectedNode && (
-        <div className="w-72 bg-[#FFFFFF0F] backdrop-blur-md border-l border-[#FFFFFF15] flex flex-col p-5 gap-3.5 shrink-0">
+        <div className="w-72 bg-[#FFFFFF0F] backdrop-blur-md border-l border-[#FFFFFF15] flex flex-col p-5 gap-3.5 shrink-0 panel-enter">
           <h3 className="text-sm font-semibold text-[#E5E4E1]">
             Session: {selectedNode.label}
           </h3>
