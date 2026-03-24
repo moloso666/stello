@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef } from 'react'
-import { subscribeWs } from '@/lib/ws'
 
 /** 事件类型 */
 type EventType = 'turn:start' | 'turn:end' | 'consolidate' | 'integrate' | 'fork' | 'error'
@@ -68,29 +67,48 @@ export function Events() {
   const [wsConnected, setWsConnected] = useState(false)
   const nextIdRef = useRef(100)
 
-  /* 订阅 WS 事件（EventBus 格式：{type, sessionId, timestamp, data}） */
+  /* 直接管理 WS 连接——不依赖全局单例 */
   useEffect(() => {
-    const unsub = subscribeWs((msg) => {
-      setWsConnected(true)
-      const rawType = String(msg['type'] ?? '')
-      const eventType = wsTypeToEventType(rawType)
-      if (!eventType) return
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+    const url = `${protocol}//${window.location.host}/ws`
+    let ws: WebSocket | null = null
+    let closed = false
 
-      const data = msg['data'] as Record<string, unknown> | undefined
-      const desc = data
-        ? Object.entries(data).map(([k, v]) => `${k}: ${String(v).slice(0, 50)}`).join(' · ')
-        : rawType
-
-      const newEvent: StelloEvent = {
-        id: String(nextIdRef.current++),
-        time: msg['timestamp'] ? formatTime(new Date(String(msg['timestamp']))) : formatTime(new Date()),
-        type: eventType,
-        session: String(msg['sessionId'] ?? '—'),
-        description: `${rawType}${desc !== rawType ? ` — ${desc}` : ''}`,
+    function connect() {
+      if (closed) return
+      ws = new WebSocket(url)
+      ws.onopen = () => setWsConnected(true)
+      ws.onclose = () => {
+        setWsConnected(false)
+        if (!closed) setTimeout(connect, 3000)
       }
-      setEvents((prev) => [newEvent, ...prev])
-    })
-    return unsub
+      ws.onerror = () => ws?.close()
+      ws.onmessage = (event) => {
+        try {
+          const msg = JSON.parse(event.data as string) as Record<string, unknown>
+          const rawType = String(msg['type'] ?? '')
+          const eventType = wsTypeToEventType(rawType)
+          if (!eventType) return
+
+          const data = msg['data'] as Record<string, unknown> | undefined
+          const desc = data
+            ? Object.entries(data).map(([k, v]) => `${k}: ${String(v).slice(0, 50)}`).join(' · ')
+            : rawType
+
+          const newEvent: StelloEvent = {
+            id: String(nextIdRef.current++),
+            time: msg['timestamp'] ? formatTime(new Date(String(msg['timestamp']))) : formatTime(new Date()),
+            type: eventType,
+            session: String(msg['sessionId'] ?? '—'),
+            description: `${rawType}${desc !== rawType ? ` — ${desc}` : ''}`,
+          }
+          setEvents((prev) => [newEvent, ...prev])
+        } catch { /* ignore */ }
+      }
+    }
+
+    connect()
+    return () => { closed = true; ws?.close() }
   }, [])
 
   const filtered = activeFilter === 'all'

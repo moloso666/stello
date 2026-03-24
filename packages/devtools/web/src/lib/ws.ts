@@ -3,15 +3,25 @@
 type WsMessage = Record<string, unknown>
 type WsListener = (msg: WsMessage) => void
 
-let ws: WebSocket | null = null
 const listeners = new Set<WsListener>()
+let ws: WebSocket | null = null
+let reconnectTimer: ReturnType<typeof setTimeout> | null = null
 
-/** 连接 WS */
-export function connectWs(): void {
-  if (ws?.readyState === WebSocket.OPEN) return
-
+/** 内部：创建新 WS 连接 */
+function createConnection(): void {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-  ws = new WebSocket(`${protocol}//${window.location.host}/ws`)
+  const url = `${protocol}//${window.location.host}/ws`
+
+  try {
+    ws = new WebSocket(url)
+  } catch {
+    scheduleReconnect()
+    return
+  }
+
+  ws.onopen = () => {
+    console.log('[DevTools WS] connected')
+  }
 
   ws.onmessage = (event) => {
     try {
@@ -23,14 +33,35 @@ export function connectWs(): void {
   }
 
   ws.onclose = () => {
-    /* 3 秒后自动重连 */
-    setTimeout(connectWs, 3000)
+    console.log('[DevTools WS] closed, reconnecting...')
+    ws = null
+    scheduleReconnect()
   }
+
+  ws.onerror = () => {
+    ws?.close()
+  }
+}
+
+function scheduleReconnect(): void {
+  if (reconnectTimer) return
+  reconnectTimer = setTimeout(() => {
+    reconnectTimer = null
+    createConnection()
+  }, 3000)
+}
+
+/** 连接 WS（幂等，多次调用安全） */
+export function connectWs(): void {
+  if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return
+  createConnection()
 }
 
 /** 订阅 WS 消息 */
 export function subscribeWs(listener: WsListener): () => void {
   listeners.add(listener)
+  /* 如果 WS 还没连，自动连 */
+  connectWs()
   return () => listeners.delete(listener)
 }
 
