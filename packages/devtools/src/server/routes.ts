@@ -57,6 +57,25 @@ export function createRoutes(agent: StelloAgent): Hono {
     return c.json({ meta, records, l2, scope })
   })
 
+  /** 手动触发 consolidation（L3 → L2） */
+  app.post('/sessions/:id/consolidate', async (c) => {
+    const id = c.req.param('id')
+    const memory = agent.config.memory
+    const consolidateFn = agent.config.session?.consolidateFn
+    if (!consolidateFn) {
+      return c.json({ error: 'No consolidateFn configured' }, 400)
+    }
+    const records = await memory.readRecords(id)
+    if (records.length === 0) {
+      return c.json({ error: 'No records to consolidate' }, 400)
+    }
+    const currentMemory = await memory.readMemory(id).catch(() => null)
+    const messages = records.map((r) => ({ role: r.role, content: r.content, timestamp: r.timestamp }))
+    const l2 = await consolidateFn(currentMemory, messages)
+    await memory.writeMemory(id, l2)
+    return c.json({ ok: true, l2 })
+  })
+
   /** 进入 session */
   app.post('/sessions/:id/enter', async (c) => {
     const id = c.req.param('id')

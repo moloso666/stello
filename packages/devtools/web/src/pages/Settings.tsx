@@ -231,23 +231,34 @@ export function SettingsPage() {
 
         {/* Scheduling Policy */}
         <Card title="Scheduling Policy">
+          <div className="bg-surface rounded-lg p-3 mb-3">
+            <p className="text-[11px] text-text-secondary leading-relaxed">
+              <span className="font-semibold text-text">Consolidation</span> (L3→L2): 将对话记录提炼为摘要。
+              <span className="font-semibold text-text"> Integration</span>: 综合所有子 Session 的 L2 生成 synthesis + insights。
+              设为 <code className="text-[10px] bg-muted px-1 rounded">manual</code> 时需手动触发（Conversation → L2 tab → Generate 按钮）。
+            </p>
+          </div>
           <Row label="Consolidation Trigger">
             <Select value={consolidationTrigger} options={['manual', 'everyNTurns', 'onSwitch', 'onArchive', 'onLeave']} onChange={setConsolidationTrigger} />
           </Row>
+          {consolidationTrigger === 'everyNTurns' && (
+            <Row label="Every N Turns">
+              <NumberInput value={consolidationEveryN} onChange={setConsolidationEveryN} />
+            </Row>
+          )}
           <Row label="Integration Trigger">
             <Select value={integrationTrigger} options={['manual', 'afterConsolidate', 'everyNTurns', 'onSwitch', 'onArchive', 'onLeave']} onChange={setIntegrationTrigger} />
           </Row>
+          {integrationTrigger === 'everyNTurns' && (
+            <Row label="Every N Turns">
+              <NumberInput value={integrationEveryN} onChange={setIntegrationEveryN} />
+            </Row>
+          )}
           <Row label="System Prompt">
             <div className="flex items-center gap-1 px-2.5 py-1 bg-primary-light rounded-md cursor-pointer">
               <Pencil size={10} className="text-primary" />
               <span className="text-[11px] font-medium text-primary">Edit</span>
             </div>
-          </Row>
-          <Row label="Consolidation Every N Turns">
-            <NumberInput value={consolidationEveryN} onChange={setConsolidationEveryN} />
-          </Row>
-          <Row label="Integration Every N Turns">
-            <NumberInput value={integrationEveryN} onChange={setIntegrationEveryN} />
           </Row>
         </Card>
 

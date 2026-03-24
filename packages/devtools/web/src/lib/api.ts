@@ -92,6 +92,11 @@ export function fetchSessionDetail(id: string) {
   return request<SessionDetail>(`/sessions/${id}/detail`)
 }
 
+/** 手动触发 consolidation */
+export function consolidateSession(id: string) {
+  return request<{ ok: boolean; l2: string }>(`/sessions/${id}/consolidate`, { method: 'POST' })
+}
+
 /** 进入 session */
 export function enterSession(id: string) {
   return request<unknown>(`/sessions/${id}/enter`, { method: 'POST' })

@@ -9,7 +9,7 @@ import {
   ArrowDownRight,
   Loader2,
 } from 'lucide-react'
-import { fetchSessions, fetchConfig, fetchSessionDetail, sendTurn, enterSession, type AgentConfig, type SessionDetail } from '@/lib/api'
+import { fetchSessions, fetchConfig, fetchSessionDetail, sendTurn, enterSession, consolidateSession, type AgentConfig, type SessionDetail } from '@/lib/api'
 import { sendWs, subscribeWs } from '@/lib/ws'
 
 /** Session 列表项 */
@@ -54,6 +54,7 @@ export function Conversation() {
   const [activeTab, setActiveTab] = useState<'l3' | 'l2' | 'insights' | 'prompt'>('l3')
   const [inputValue, setInputValue] = useState('')
   const [sending, setSending] = useState(false)
+  const [consolidating, setConsolidating] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [config, setConfig] = useState<AgentConfig | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -359,16 +360,42 @@ export function Conversation() {
 
           {activeTab === 'l2' && (
             <>
-              <p className="text-[10px] font-semibold text-text-muted tracking-wide">L2 MEMORY</p>
+              <div className="flex items-center justify-between">
+                <p className="text-[10px] font-semibold text-text-muted tracking-wide">L2 MEMORY</p>
+                <button
+                  onClick={async () => {
+                    if (!selectedSession || consolidating) return
+                    setConsolidating(true)
+                    try {
+                      const result = await consolidateSession(selectedSession.id)
+                      setDetail((prev) => prev ? { ...prev, l2: result.l2 } : prev)
+                    } catch (err) {
+                      alert(`Consolidation failed: ${err instanceof Error ? err.message : err}`)
+                    } finally {
+                      setConsolidating(false)
+                    }
+                  }}
+                  disabled={consolidating || !selectedSession}
+                  className="flex items-center gap-1 px-2 py-1 bg-primary/10 hover:bg-primary/20 rounded-md transition-colors disabled:opacity-40"
+                >
+                  {consolidating
+                    ? <Loader2 size={10} className="text-primary animate-spin" />
+                    : <Zap size={10} className="text-primary" />
+                  }
+                  <span className="text-[10px] font-medium text-primary">
+                    {consolidating ? 'Generating...' : detail?.l2 ? 'Regenerate' : 'Generate L2'}
+                  </span>
+                </button>
+              </div>
               {detail?.l2 ? (
-                <div className="bg-card rounded-lg p-3 shadow-sm border border-border/30">
+                <div className="bg-card rounded-lg p-3 shadow-sm border border-border/30 mt-2">
                   <div className="flex items-center gap-1 mb-2">
                     <span className="text-[10px] font-medium text-success bg-[#E8F5E9] px-1.5 py-0.5 rounded">consolidated</span>
                   </div>
                   <p className="text-[11px] text-text-secondary leading-relaxed">{detail.l2}</p>
                 </div>
               ) : (
-                <p className="text-[11px] text-text-muted italic">No L2 memory consolidated yet</p>
+                <p className="text-[11px] text-text-muted italic mt-2">No L2 memory yet. Click Generate to create from conversation history.</p>
               )}
             </>
           )}
