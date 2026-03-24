@@ -1,3 +1,4 @@
+import type pg from 'pg'
 import type {
   SessionCompatibleConsolidateFn,
   SessionCompatibleIntegrateFn,
@@ -8,12 +9,35 @@ export type LLMCallFn = (
   messages: Array<{ role: string; content: string }>,
 ) => Promise<string>
 
-/** 根据 prompt 创建默认 consolidateFn：prompt + L3 历史 → L2 */
+/** 从 session_data 读取 per-session prompt，不存在返回 null */
+async function getSessionPrompt(
+  pool: pg.Pool,
+  spaceId: string,
+  sessionId: string,
+  key: string,
+): Promise<string | null> {
+  const { rows } = await pool.query(
+    `SELECT sd.content FROM session_data sd
+     JOIN sessions s ON s.id = sd.session_id
+     WHERE s.space_id = $1 AND sd.session_id = $2 AND sd.key = $3`,
+    [spaceId, sessionId, key],
+  )
+  return (rows[0]?.['content'] as string) ?? null
+}
+
+/** 创建 per-session consolidateFn：查 per-session prompt → fallback space prompt → 调 LLM */
 export function createDefaultConsolidateFn(
-  prompt: string,
+  sessionId: string,
+  spacePrompt: string | null,
   llm: LLMCallFn,
+  pool: pg.Pool,
+  spaceId: string,
 ): SessionCompatibleConsolidateFn {
   return async (currentMemory, messages) => {
+    const prompt = await getSessionPrompt(pool, spaceId, sessionId, 'consolidate_prompt')
+      ?? spacePrompt
+    if (!prompt) return currentMemory ?? ''
+
     const parts: string[] = []
     if (currentMemory) {
       parts.push(`当前摘要:\n${currentMemory}`)
@@ -28,12 +52,21 @@ export function createDefaultConsolidateFn(
   }
 }
 
-/** 根据 prompt 创建默认 integrateFn：prompt + 所有子 L2 + 当前 synthesis → synthesis + insights */
+/** 创建 per-session integrateFn：查 per-session prompt → fallback space prompt → 调 LLM */
 export function createDefaultIntegrateFn(
-  prompt: string,
+  mainSessionId: string,
+  spacePrompt: string | null,
   llm: LLMCallFn,
+  pool: pg.Pool,
+  spaceId: string,
 ): SessionCompatibleIntegrateFn {
   return async (children, currentSynthesis) => {
+    const prompt = await getSessionPrompt(pool, spaceId, mainSessionId, 'integrate_prompt')
+      ?? spacePrompt
+    if (!prompt) {
+      return { synthesis: currentSynthesis ?? '', insights: [] }
+    }
+
     const parts: string[] = []
     if (currentSynthesis) {
       parts.push(`当前综合:\n${currentSynthesis}`)
