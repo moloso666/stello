@@ -1,17 +1,10 @@
 import { useRef, useEffect, useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { GitBranch, Archive, MessageSquare, Search, X } from 'lucide-react'
+import { fetchSessions, type SessionNode } from '@/lib/api'
 
-/** 拓扑节点 */
-interface TopoNode {
-  id: string
-  label: string
-  parentId: string | null
-  status: 'active' | 'archived'
-  turns: number
-  children: string[]
-  refs: string[]
-}
+/** 拓扑节点（兼容 API 和 mock） */
+type TopoNode = SessionNode
 
 /** 布局后节点 */
 interface LayoutNode extends TopoNode {
@@ -248,12 +241,23 @@ export function Topology() {
   const containerRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const nodesRef = useRef<LayoutNode[]>([])
+  const [topoNodes, setTopoNodes] = useState<TopoNode[]>(mockNodes)
   const [size, setSize] = useState({ width: 800, height: 600 })
   const [highlighted, setHighlighted] = useState<string | null>(null)
   const [tooltip, setTooltip] = useState<TooltipState>({ visible: false, x: 0, y: 0, node: null })
   const [selectedNode, setSelectedNode] = useState<LayoutNode | null>(null)
   const [panelOpen, setPanelOpen] = useState(false)
   const navigate = useNavigate()
+
+  /* 从 API 拉取 session 数据，失败 fallback 到 mock */
+  useEffect(() => {
+    fetchSessions()
+      .then(({ root, children }) => {
+        const all: TopoNode[] = [root, ...children]
+        if (all.length > 0) setTopoNodes(all)
+      })
+      .catch(() => { /* API 不可用，保持 mock 数据 */ })
+  }, [])
 
   /* ResizeObserver */
   useEffect(() => {
@@ -270,9 +274,9 @@ export function Topology() {
 
   /* 布局计算 */
   useEffect(() => {
-    const layout = computeLayout(mockNodes, size.width, size.height)
+    const layout = computeLayout(topoNodes, size.width, size.height)
     nodesRef.current = layout
-  }, [size])
+  }, [size, topoNodes])
 
   /* rAF 动画循环 */
   useEffect(() => {
@@ -351,7 +355,7 @@ export function Topology() {
           <span className="text-base font-semibold text-[#E5E4E1]">Session Topology</span>
           <div className="flex items-center gap-1 bg-primary/15 rounded-full px-2.5 py-0.5">
             <div className="w-1.5 h-1.5 rounded-full bg-primary" />
-            <span className="text-[11px] font-medium text-primary">{mockNodes.length} sessions</span>
+            <span className="text-[11px] font-medium text-primary">{topoNodes.length} sessions</span>
           </div>
         </div>
 

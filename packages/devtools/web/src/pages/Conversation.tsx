@@ -6,7 +6,9 @@ import {
   Terminal,
   ArrowUp,
   ArrowDownRight,
+  Loader2,
 } from 'lucide-react'
+import { fetchSessions, fetchConfig, sendTurn, type SessionNode, type AgentConfig } from '@/lib/api'
 
 /** Session 列表项 */
 interface SessionItem {
@@ -77,10 +79,33 @@ function RoleBadge({ role }: { role: 'user' | 'asst' | 'tool' }) {
 
 /** Conversation 对话栏页面 */
 export function Conversation() {
+  const [sessions, setSessions] = useState(mockSessions)
   const [selectedSession, setSelectedSession] = useState(mockSessions[0]!)
   const [activeTab, setActiveTab] = useState<'l3' | 'l2' | 'insights' | 'prompt'>('l3')
   const [inputValue, setInputValue] = useState('')
+  const [sending, setSending] = useState(false)
+  const [config, setConfig] = useState<AgentConfig | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+
+  /* 从 API 拉取 session 列表 */
+  useEffect(() => {
+    fetchSessions()
+      .then(({ root, children }) => {
+        const all = [root, ...children].map((n) => ({
+          id: n.id,
+          label: n.label,
+          turns: n.turns ?? 0,
+          status: (n.status ?? 'active') as 'active' | 'archived',
+          color: n.parentId === null ? '#C4A882' : n.status === 'archived' ? '#D89575' : '#B8956A',
+        }))
+        if (all.length > 0) {
+          setSessions(all)
+          setSelectedSession(all[0]!)
+        }
+      })
+      .catch(() => {})
+    fetchConfig().then(setConfig).catch(() => {})
+  }, [])
 
   /* 消息列表自动滚到底部 */
   useEffect(() => {
@@ -94,7 +119,7 @@ export function Conversation() {
         {/* 列表头 */}
         <div className="flex items-center justify-between px-4 pt-4 pb-3">
           <span className="text-sm font-semibold text-text">Sessions</span>
-          <span className="text-xs text-text-muted">{mockSessions.length}</span>
+          <span className="text-xs text-text-muted">{sessions.length}</span>
         </div>
         {/* 搜索 */}
         <div className="px-3 pb-2">
@@ -109,7 +134,7 @@ export function Conversation() {
         </div>
         {/* Session 列表 */}
         <div className="flex-1 overflow-y-auto">
-          {mockSessions.map((s) => (
+          {sessions.map((s) => (
             <button
               key={s.id}
               onClick={() => setSelectedSession(s)}
@@ -145,11 +170,11 @@ export function Conversation() {
           <div className="flex items-center gap-2">
             <div className="flex items-center gap-1 px-2.5 py-1 bg-surface rounded-md border border-border">
               <Zap size={12} className="text-[#D89575]" />
-              <span className="text-[11px] font-medium text-text-secondary">3 Skills</span>
+              <span className="text-[11px] font-medium text-text-secondary">{config?.capabilities.skills.length ?? 3} Skills</span>
             </div>
             <div className="flex items-center gap-1 px-2.5 py-1 bg-surface rounded-md border border-border">
               <Wrench size={12} className="text-text-secondary" />
-              <span className="text-[11px] font-medium text-text-secondary">5 Tools</span>
+              <span className="text-[11px] font-medium text-text-secondary">{config?.capabilities.tools.length ?? 5} Tools</span>
             </div>
           </div>
         </div>
