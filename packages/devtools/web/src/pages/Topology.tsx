@@ -115,7 +115,7 @@ function isAdjacent(node: LayoutNode, highlightedId: string | null, nodeMap: Map
   return false
 }
 
-/** 渲染一帧（带动画时间） */
+/** 渲染一帧（带动画时间）——调用前 ctx 已经设置好 camera 变换 */
 function renderFrame(
   ctx: CanvasRenderingContext2D,
   nodes: LayoutNode[],
@@ -124,15 +124,13 @@ function renderFrame(
   highlightedId: string | null,
   time: number = 0,
 ) {
-  const dpr = window.devicePixelRatio || 1
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
-
-  /* 背景渐变 */
-  const grad = ctx.createRadialGradient(width / 2, height / 2, 0, width / 2, height / 2, width * 0.7)
+  /* 背景渐变——需要覆盖可见区域（考虑平移后的范围） */
+  const margin = 2000
+  const grad = ctx.createRadialGradient(width / 2, height / 2, 0, width / 2, height / 2, width)
   grad.addColorStop(0, '#2A2520')
   grad.addColorStop(1, '#1A1815')
   ctx.fillStyle = grad
-  ctx.fillRect(0, 0, width, height)
+  ctx.fillRect(-margin, -margin, width + margin * 2, height + margin * 2)
 
   const nodeMap = new Map(nodes.map((n) => [n.id, n]))
   const hasHighlight = highlightedId !== null
@@ -236,6 +234,26 @@ interface TooltipState {
   node: LayoutNode | null
 }
 
+/** Camera 状态 */
+interface Camera {
+  x: number
+  y: number
+  zoom: number
+  /* 惯性速度 */
+  vx: number
+  vy: number
+}
+
+/** 屏幕坐标 → 世界坐标 */
+function screenToWorld(sx: number, sy: number, cam: Camera): { wx: number; wy: number } {
+  return { wx: sx / cam.zoom - cam.x, wy: sy / cam.zoom - cam.y }
+}
+
+/** 世界坐标 → 屏幕坐标 */
+function worldToScreen(wx: number, wy: number, cam: Camera): { sx: number; sy: number } {
+  return { sx: (wx + cam.x) * cam.zoom, sy: (wy + cam.y) * cam.zoom }
+}
+
 /** Topology 星空图页面 */
 export function Topology() {
   const containerRef = useRef<HTMLDivElement>(null)
@@ -249,14 +267,30 @@ export function Topology() {
   const [panelOpen, setPanelOpen] = useState(false)
   const navigate = useNavigate()
 
-  /* 从 API 拉取 session 数据，失败 fallback 到 mock */
+  /* Camera ref（不触发 re-render，rAF 循环直接读取） */
+  const cameraRef = useRef<Camera>({ x: 0, y: 0, zoom: 1, vx: 0, vy: 0 })
+  const dragRef = useRef<{
+    active: boolean
+    startX: number
+    startY: number
+    lastX: number
+    lastY: number
+    draggingNodeId: string | null
+    hasMoved: boolean
+  }>({ active: false, startX: 0, startY: 0, lastX: 0, lastY: 0, draggingNodeId: null, hasMoved: false })
+  const highlightedRef = useRef<string | null>(null)
+
+  /* 同步 highlighted 到 ref（rAF 读取） */
+  useEffect(() => { highlightedRef.current = highlighted }, [highlighted])
+
+  /* 从 API 拉取 session 数据 */
   useEffect(() => {
     fetchSessions()
       .then(({ root, children }) => {
         const all: TopoNode[] = [root, ...children]
         if (all.length > 0) setTopoNodes(all)
       })
-      .catch(() => { /* API 不可用，保持 mock 数据 */ })
+      .catch(() => {})
   }, [])
 
   /* ResizeObserver */
@@ -278,7 +312,7 @@ export function Topology() {
     nodesRef.current = layout
   }, [size, topoNodes])
 
-  /* rAF 动画循环 */
+  /* rAF 动画循环——读 cameraRef，带惯性衰减 */
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
@@ -291,47 +325,156 @@ export function Topology() {
 
     let rafId: number
     const loop = (time: number) => {
-      renderFrame(ctx, nodesRef.current, size.width, size.height, highlighted, time)
+      const cam = cameraRef.current
+
+      /* 惯性衰减 */
+      if (!dragRef.current.active && (Math.abs(cam.vx) > 0.1 || Math.abs(cam.vy) > 0.1)) {
+        cam.x += cam.vx
+        cam.y += cam.vy
+        cam.vx *= 0.92
+        cam.vy *= 0.92
+      } else if (!dragRef.current.active) {
+        cam.vx = 0
+        cam.vy = 0
+      }
+
+      /* 应用 camera 变换 */
+      ctx.setTransform(dpr * cam.zoom, 0, 0, dpr * cam.zoom, dpr * cam.x * cam.zoom, dpr * cam.y * cam.zoom)
+      renderFrame(ctx, nodesRef.current, size.width / cam.zoom, size.height / cam.zoom, highlightedRef.current, time)
+
       rafId = requestAnimationFrame(loop)
     }
     rafId = requestAnimationFrame(loop)
     return () => cancelAnimationFrame(rafId)
-  }, [size, highlighted])
+  }, [size])
 
-  /* 鼠标交互 */
+  /* 命中测试（屏幕坐标 → 世界坐标 → 找节点） */
+  const hitTest = useCallback((screenX: number, screenY: number): LayoutNode | null => {
+    const cam = cameraRef.current
+    const { wx, wy } = screenToWorld(screenX, screenY, cam)
+    return nodesRef.current.find((n) => {
+      const dx = n.x - wx
+      const dy = n.y - wy
+      return dx * dx + dy * dy <= (n.size + 6) * (n.size + 6)
+    }) ?? null
+  }, [])
+
+  /* mousedown */
+  const handleMouseDown = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+    const rect = canvasRef.current?.getBoundingClientRect()
+    if (!rect) return
+    const sx = e.clientX - rect.left
+    const sy = e.clientY - rect.top
+
+    const hit = hitTest(sx, sy)
+    const cam = cameraRef.current
+    cam.vx = 0
+    cam.vy = 0
+
+    dragRef.current = {
+      active: true,
+      startX: e.clientX,
+      startY: e.clientY,
+      lastX: e.clientX,
+      lastY: e.clientY,
+      draggingNodeId: hit?.id ?? null,
+      hasMoved: false,
+    }
+  }, [hitTest])
+
+  /* mousemove */
   const handleMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current
     if (!canvas) return
     const rect = canvas.getBoundingClientRect()
-    const mx = e.clientX - rect.left
-    const my = e.clientY - rect.top
+    const sx = e.clientX - rect.left
+    const sy = e.clientY - rect.top
+    const drag = dragRef.current
+    const cam = cameraRef.current
 
-    const hit = nodesRef.current.find((n) => {
-      const dx = n.x - mx
-      const dy = n.y - my
-      return dx * dx + dy * dy <= (n.size + 4) * (n.size + 4)
-    })
+    if (drag.active) {
+      const dx = e.clientX - drag.lastX
+      const dy = e.clientY - drag.lastY
 
-    if (hit) {
-      setHighlighted(hit.id)
-      setTooltip({ visible: true, x: e.clientX, y: e.clientY, node: hit })
-      canvas.style.cursor = 'pointer'
-    } else {
-      setHighlighted(null)
+      if (Math.abs(e.clientX - drag.startX) > 3 || Math.abs(e.clientY - drag.startY) > 3) {
+        drag.hasMoved = true
+      }
+
+      if (drag.draggingNodeId) {
+        /* 拖拽节点 */
+        const node = nodesRef.current.find((n) => n.id === drag.draggingNodeId)
+        if (node) {
+          node.x += dx / cam.zoom
+          node.y += dy / cam.zoom
+        }
+        canvas.style.cursor = 'grabbing'
+      } else {
+        /* 拖拽平移画布 */
+        cam.x += dx / cam.zoom
+        cam.y += dy / cam.zoom
+        cam.vx = dx / cam.zoom * 0.3
+        cam.vy = dy / cam.zoom * 0.3
+        canvas.style.cursor = 'grabbing'
+      }
+
+      drag.lastX = e.clientX
+      drag.lastY = e.clientY
       setTooltip({ visible: false, x: 0, y: 0, node: null })
-      canvas.style.cursor = 'default'
+    } else {
+      /* hover 检测 */
+      const hit = hitTest(sx, sy)
+      if (hit) {
+        setHighlighted(hit.id)
+        setTooltip({ visible: true, x: e.clientX, y: e.clientY, node: hit })
+        canvas.style.cursor = 'pointer'
+      } else {
+        setHighlighted(null)
+        setTooltip({ visible: false, x: 0, y: 0, node: null })
+        canvas.style.cursor = 'grab'
+      }
     }
+  }, [hitTest])
+
+  /* mouseup */
+  const handleMouseUp = useCallback(() => {
+    const drag = dragRef.current
+    if (drag.active && !drag.hasMoved) {
+      /* 点击（没有拖动） */
+      if (drag.draggingNodeId) {
+        const node = nodesRef.current.find((n) => n.id === drag.draggingNodeId)
+        setSelectedNode(node ?? null)
+        setPanelOpen(true)
+      } else {
+        setPanelOpen(false)
+      }
+    }
+    drag.active = false
+    drag.draggingNodeId = null
+    if (canvasRef.current) canvasRef.current.style.cursor = 'grab'
   }, [])
 
-  const handleClick = useCallback(() => {
-    if (highlighted) {
-      const node = nodesRef.current.find((n) => n.id === highlighted)
-      setSelectedNode(node ?? null)
-      setPanelOpen(true)
-    } else {
-      setPanelOpen(false)
-    }
-  }, [highlighted])
+  /* wheel 缩放 */
+  const handleWheel = useCallback((e: React.WheelEvent<HTMLCanvasElement>) => {
+    e.preventDefault()
+    const cam = cameraRef.current
+    const rect = canvasRef.current?.getBoundingClientRect()
+    if (!rect) return
+
+    const mouseX = e.clientX - rect.left
+    const mouseY = e.clientY - rect.top
+
+    /* 缩放前的世界坐标 */
+    const { wx, wy } = screenToWorld(mouseX, mouseY, cam)
+
+    /* 计算新 zoom */
+    const factor = e.deltaY > 0 ? 0.92 : 1.08
+    const newZoom = Math.max(0.3, Math.min(3, cam.zoom * factor))
+    cam.zoom = newZoom
+
+    /* 缩放后保持鼠标位置对应同一世界坐标 */
+    cam.x = mouseX / newZoom - wx
+    cam.y = mouseY / newZoom - wy
+  }, [])
 
   /** 关闭面板 */
   const closePanel = useCallback(() => {
@@ -345,9 +488,12 @@ export function Topology() {
       <div ref={containerRef} className="flex-1 relative overflow-hidden">
         <canvas
           ref={canvasRef}
-          style={{ width: '100%', height: '100%', display: 'block' }}
+          style={{ width: '100%', height: '100%', display: 'block', cursor: 'grab' }}
+          onMouseDown={handleMouseDown}
           onMouseMove={handleMouseMove}
-          onClick={handleClick}
+          onMouseUp={handleMouseUp}
+          onMouseLeave={handleMouseUp}
+          onWheel={handleWheel}
         />
 
         {/* 顶部标题栏 */}
