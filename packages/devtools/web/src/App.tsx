@@ -1,8 +1,6 @@
-import { useEffect } from 'react'
 import { Routes, Route, NavLink, Navigate, useLocation } from 'react-router-dom'
 import { Sparkles, MessageSquare, Search, Activity, Settings } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { connectWs } from '@/lib/ws'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { Topology } from '@/pages/Topology'
 import { Conversation } from '@/pages/Conversation'
@@ -43,9 +41,6 @@ function NavItem({ to, icon: Icon, label }: (typeof navItems)[number]) {
 /** 主应用布局 */
 export function App() {
   const location = useLocation()
-
-  /* 启动 WS 连接 */
-  useEffect(() => { connectWs() }, [])
 
   return (
     <div className="flex h-screen w-screen overflow-hidden">

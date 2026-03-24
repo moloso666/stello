@@ -30,6 +30,11 @@ export class SplitGuard {
     this.testMode = strategy?.testMode ?? false;
   }
 
+  /** 获取当前配置（用于序列化 / 展示） */
+  getConfig(): { minTurns: number; cooldownTurns: number } {
+    return { minTurns: this.minTurns, cooldownTurns: this.cooldownTurns };
+  }
+
   /** 检查指定 Session 是否允许拆分 */
   async checkCanSplit(sessionId: string): Promise<SplitCheckResult> {
     if (this.testMode) return { canSplit: true };

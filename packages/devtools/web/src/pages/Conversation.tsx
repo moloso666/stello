@@ -115,7 +115,6 @@ export function Conversation() {
 
   /* 初始加载 */
   useEffect(() => {
-    console.log('[Chat] mount, fetching sessions...')
     fetchSessions()
       .then(({ sessions: list }) => {
         const all = list.map((s, i) => ({
@@ -166,14 +165,11 @@ export function Conversation() {
 
   /* 切换 session 时拉取 detail（L2/scope）+ 历史 records */
   useEffect(() => {
-    console.log('[Chat] selectedSession changed:', selectedSession?.id, selectedSession?.label)
     if (!selectedSession) return
     setMessages([])
     setDetail(null)
-    console.log('[Chat] fetching detail for', selectedSession.id)
     fetchSessionDetail(selectedSession.id)
       .then((d) => {
-        console.log('[Chat] detail loaded:', { records: d?.records?.length, l2: !!d?.l2 })
         setDetail(d)
         const records = d?.records ?? []
         if (records.length > 0) {

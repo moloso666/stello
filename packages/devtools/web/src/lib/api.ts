@@ -40,13 +40,39 @@ export interface SessionDetail {
   scope: string | null
 }
 
-/** Agent 配置 */
+/** Agent 配置（只读快照） */
 export interface AgentConfig {
-  orchestration: { strategy: string }
+  orchestration: {
+    strategy: string
+    hasMainSession: boolean
+    hasTurnRunner: boolean
+  }
+  runtime: {
+    idleTtlMs: number
+    hasResolver: boolean
+  }
+  scheduling: {
+    consolidation: { trigger: string; everyNTurns?: number }
+    integration: { trigger: string; everyNTurns?: number }
+    hasScheduler: boolean
+  }
+  splitGuard: { minTurns: number; cooldownTurns: number } | null
+  session: {
+    hasSessionResolver: boolean
+    hasMainSessionResolver: boolean
+    hasConsolidateFn: boolean
+    hasIntegrateFn: boolean
+    hasSerializeSendResult: boolean
+    hasToolCallParser: boolean
+    options: Record<string, unknown> | null
+  }
   capabilities: {
     tools: Array<{ name: string; description: string; parameters?: Record<string, unknown> }>
     skills: Array<{ name: string; description: string }>
+    hasLifecycle: boolean
+    hasConfirm: boolean
   }
+  hooks: string[]
 }
 
 /** Turn 结果 */
@@ -130,10 +156,4 @@ export function fetchConfig() {
   return request<AgentConfig>('/config')
 }
 
-/** 更新 agent 配置 */
-export function patchConfig(updates: Record<string, unknown>) {
-  return request<{ ok: boolean; applied: string[]; needsRestart: string[]; note: string }>('/config', {
-    method: 'PATCH',
-    body: JSON.stringify(updates),
-  })
-}
+/* PATCH /config 暂未开放——后续热更新时实现 */

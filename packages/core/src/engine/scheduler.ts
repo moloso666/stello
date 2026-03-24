@@ -79,6 +79,11 @@ export class Scheduler {
     this.integration = config.integration ?? { trigger: 'manual' };
   }
 
+  /** 获取当前调度配置（用于序列化 / 展示） */
+  getConfig(): SchedulerConfig {
+    return { consolidation: { ...this.consolidation }, integration: { ...this.integration } };
+  }
+
   /** turn 结束后的调度 */
   async afterTurn(
     session: SchedulerSession,

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 
 /** 事件类型 */
 type EventType = 'turn:start' | 'turn:end' | 'consolidate' | 'integrate' | 'fork' | 'error'
@@ -65,10 +65,20 @@ export function Events() {
   const [activeFilter, setActiveFilter] = useState('all')
   const [events, setEvents] = useState<StelloEvent[]>([])
   const [wsConnected, setWsConnected] = useState(false)
+  const [sessionLabels, setSessionLabels] = useState<Record<string, string>>({})
   const nextIdRef = useRef(100)
 
+  /* 拉取 session 列表建立 id→label 映射 */
+  useEffect(() => {
+    fetch('/api/sessions').then((r) => r.json()).then((body: { sessions: Array<{ id: string; label: string }> }) => {
+      const map: Record<string, string> = {}
+      for (const s of body.sessions) map[s.id] = s.label
+      setSessionLabels(map)
+    }).catch(() => {})
+  }, [])
+
   /** 将 raw event 转成 StelloEvent */
-  const parseEvent = (msg: Record<string, unknown>): StelloEvent | null => {
+  const parseEvent = useCallback((msg: Record<string, unknown>): StelloEvent | null => {
     const rawType = String(msg['type'] ?? '')
     const eventType = wsTypeToEventType(rawType)
     if (!eventType) return null
@@ -83,7 +93,7 @@ export function Events() {
       session: String(msg['sessionId'] ?? '—'),
       description: `${rawType}${desc !== rawType ? ` — ${desc}` : ''}`,
     }
-  }
+  }, [])
 
   /* 挂载时拉历史 + WS 接增量 */
   useEffect(() => {
@@ -178,8 +188,8 @@ export function Events() {
                   {style.label}
                 </span>
               </div>
-              <span className="text-[11px] font-medium text-text w-20 shrink-0">
-                {event.session}
+              <span className="text-[11px] font-medium text-text w-28 shrink-0 truncate" title={event.session}>
+                {sessionLabels[event.session] ?? event.session}
               </span>
               <span className={`text-[11px] ${isError ? 'text-error' : 'text-text-secondary'}`}>
                 {event.description}

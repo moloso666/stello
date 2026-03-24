@@ -1,36 +1,31 @@
 import { useEffect, useState } from 'react'
 import {
-  Wifi,
-  HardDrive,
-  Database,
-  Clock,
   GitBranch,
-  Shield,
+  Clock,
   Wrench,
   Zap,
   Webhook,
-  ChevronDown,
-  Pencil,
+  Shield,
+  Database,
+  Cpu,
+  Layers,
+  Lock,
   Loader2,
+  CheckCircle2,
+  XCircle,
+  ChevronDown,
+  ChevronRight,
 } from 'lucide-react'
-import { fetchConfig, patchConfig } from '@/lib/api'
+import { fetchConfig, type AgentConfig } from '@/lib/api'
 
-/** 从 API 获取的 agent 配置 */
-interface AgentConfig {
-  orchestration: {
-    strategy: string
-  }
-  capabilities: {
-    tools: Array<{ name: string; description: string }>
-    skills: Array<{ name: string; description: string }>
-  }
-}
-
-/** 配置卡片容器 */
-function Card({ title, children }: { title: string; children: React.ReactNode }) {
+/** 配置卡片 */
+function Card({ title, icon: Icon, children }: { title: string; icon: React.ElementType; children: React.ReactNode }) {
   return (
     <div className="bg-card rounded-xl p-5 shadow-sm border border-border/50">
-      <h3 className="text-sm font-semibold text-text mb-3">{title}</h3>
+      <div className="flex items-center gap-2 mb-3">
+        <Icon size={15} className="text-primary" />
+        <h3 className="text-sm font-semibold text-text">{title}</h3>
+      </div>
       <div className="h-px bg-border mb-4" />
       {children}
     </div>
@@ -38,13 +33,7 @@ function Card({ title, children }: { title: string; children: React.ReactNode })
 }
 
 /** 键值行 */
-function Row({
-  label,
-  children,
-}: {
-  label: string
-  children: React.ReactNode
-}) {
+function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex items-center justify-between py-1.5">
       <span className="text-xs font-medium text-text-muted">{label}</span>
@@ -53,42 +42,38 @@ function Row({
   )
 }
 
-/** 下拉选择器（真正可交互） */
-function Select({ value, options, onChange }: { value: string; options: string[]; onChange?: (v: string) => void }) {
-  return (
-    <select
-      value={value}
-      onChange={(e) => onChange?.(e.target.value)}
-      className="px-2.5 py-1 bg-surface rounded-md border border-border text-xs font-medium text-text cursor-pointer outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20 transition-colors appearance-none pr-6"
-      style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%239C9B99' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 8px center' }}
-    >
-      {options.map((opt) => <option key={opt} value={opt}>{opt}</option>)}
-    </select>
-  )
+/** 只读值显示 */
+function Value({ children }: { children: React.ReactNode }) {
+  return <span className="text-xs font-medium text-text">{children}</span>
 }
 
-/** 数值输入框（真正可编辑） */
-function NumberInput({ value, unit, onChange }: { value: string; unit?: string; onChange?: (v: string) => void }) {
-  return (
-    <div className="flex items-center gap-1">
-      <input
-        type="number"
-        value={value}
-        onChange={(e) => onChange?.(e.target.value)}
-        className="w-16 px-2.5 py-1 bg-surface rounded-md border border-border text-xs font-medium text-text text-center outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20 transition-colors"
-      />
-      {unit && <span className="text-[11px] text-text-muted">{unit}</span>}
-    </div>
-  )
+/** 代码风格值 */
+function CodeValue({ children }: { children: string }) {
+  return <code className="text-[11px] font-mono bg-surface px-2 py-0.5 rounded border border-border text-primary-dark">{children}</code>
 }
 
-/** 状态指示器 */
-function StatusDot({ color, label }: { color: string; label: string }) {
+/** 布尔状态指示器 */
+function StatusDot({ configured, label }: { configured: boolean; label?: string }) {
   return (
     <div className="flex items-center gap-1.5">
-      <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: color }} />
-      <span className="text-xs font-medium" style={{ color }}>{label}</span>
+      {configured
+        ? <CheckCircle2 size={12} className="text-success" />
+        : <XCircle size={12} className="text-text-muted" />
+      }
+      <span className={`text-xs font-medium ${configured ? 'text-success' : 'text-text-muted'}`}>
+        {label ?? (configured ? 'Configured' : 'Not set')}
+      </span>
     </div>
+  )
+}
+
+/** Immutable 标记 */
+function ImmutableBadge() {
+  return (
+    <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-warning/10 rounded text-[9px] font-medium text-warning" title="Immutable — set at construction, change via code">
+      <Lock size={8} />
+      Immutable
+    </span>
   )
 }
 
@@ -107,248 +92,230 @@ function Tag({ children, variant = 'default' }: { children: string; variant?: 'd
   )
 }
 
-/** Settings 配置页面 */
+/** 可折叠区域 */
+function Collapsible({ title, count, defaultOpen, children }: { title: string; count: number; defaultOpen?: boolean; children: React.ReactNode }) {
+  const [open, setOpen] = useState(defaultOpen ?? false)
+  return (
+    <div>
+      <button onClick={() => setOpen(!open)} className="flex items-center gap-1.5 w-full text-left py-1">
+        {open ? <ChevronDown size={12} className="text-text-muted" /> : <ChevronRight size={12} className="text-text-muted" />}
+        <span className="text-[10px] font-semibold text-text-muted tracking-wide">{title}</span>
+        <span className="text-[10px] text-text-muted">({count})</span>
+      </button>
+      {open && <div className="mt-1 space-y-2">{children}</div>}
+    </div>
+  )
+}
+
+/** Settings 配置页面（只读） */
 export function SettingsPage() {
   const [config, setConfig] = useState<AgentConfig | null>(null)
   const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
-  const [saveStatus, setSaveStatus] = useState<'idle' | 'saved' | 'error'>('idle')
-
-  /* 可编辑配置值 */
-  const [consolidationTrigger, setConsolidationTrigger] = useState('onSwitch')
-  const [integrationTrigger, setIntegrationTrigger] = useState('afterConsolidate')
-  const [consolidationEveryN, setConsolidationEveryN] = useState('5')
-  const [integrationEveryN, setIntegrationEveryN] = useState('3')
-  const [idleTtlMs, setIdleTtlMs] = useState('30000')
-  const [strategy, setStrategy] = useState('MainSessionFlat')
-  const [minTurns, setMinTurns] = useState('3')
-  const [cooldownTurns, setCooldownTurns] = useState('5')
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     fetchConfig()
-      .then((c) => {
-        setConfig(c)
-        if (c.orchestration.strategy) setStrategy(c.orchestration.strategy)
-      })
-      .catch(() => {})
+      .then(setConfig)
+      .catch((e: Error) => setError(e.message))
       .finally(() => setLoading(false))
   }, [])
 
-  const [saveNote, setSaveNote] = useState('')
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-full bg-surface">
+        <Loader2 size={24} className="text-primary animate-spin" />
+      </div>
+    )
+  }
 
-  /** 保存配置 */
-  const handleSave = async () => {
-    setSaving(true)
-    setSaveStatus('idle')
-    setSaveNote('')
-    try {
-      const result = await patchConfig({
-        consolidationTrigger,
-        integrationTrigger,
-        consolidationEveryN: Number(consolidationEveryN),
-        integrationEveryN: Number(integrationEveryN),
-        idleTtlMs: Number(idleTtlMs),
-        strategy,
-        minTurns: Number(minTurns),
-        cooldownTurns: Number(cooldownTurns),
-      })
-      if (result.needsRestart.length > 0) {
-        setSaveStatus('saved')
-        setSaveNote(result.note)
-        setTimeout(() => { setSaveStatus('idle'); setSaveNote('') }, 5000)
-      } else {
-        setSaveStatus('saved')
-        setTimeout(() => setSaveStatus('idle'), 2000)
-      }
-    } catch {
-      setSaveStatus('error')
-      setTimeout(() => setSaveStatus('idle'), 3000)
-    } finally {
-      setSaving(false)
-    }
+  if (error || !config) {
+    return (
+      <div className="flex items-center justify-center h-full bg-surface">
+        <div className="bg-card border border-error/30 rounded-lg px-6 py-4 max-w-md text-center">
+          <p className="text-sm font-semibold text-error mb-1">Failed to load config</p>
+          <p className="text-xs text-text-muted">{error}</p>
+        </div>
+      </div>
+    )
   }
 
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
       <div className="flex items-center justify-between h-13 px-6 border-b border-border shrink-0">
-        <h2 className="text-[15px] font-semibold text-text">Settings</h2>
-        <div className="flex items-center gap-3">
-          {saveNote && (
-            <span className="text-[10px] text-warning max-w-xs truncate">{saveNote}</span>
-          )}
-          <button
-            onClick={handleSave}
-            disabled={saving}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 ${
-              saveStatus === 'saved'
-                ? 'bg-[#E8F5E9] text-success'
-                : saveStatus === 'error'
-                  ? 'bg-[#FFEBEE] text-error'
-                  : 'bg-primary text-white hover:bg-primary/90'
-            }`}
-          >
-            {saving ? <Loader2 size={12} className="animate-spin" /> : null}
-            {saveStatus === 'saved' ? 'Saved' : saveStatus === 'error' ? 'Error' : 'Save Changes'}
-          </button>
-        </div>
+        <h2 className="text-[15px] font-semibold text-text">Agent Configuration</h2>
+        <Tag variant="default">Read-only</Tag>
       </div>
 
-      {/* 可滚动内容 */}
       <div className="flex-1 overflow-y-auto bg-surface p-6 space-y-5">
-        {/* Agent Connection */}
-        <Card title="Agent Connection">
-          <Row label="Status">
-            <StatusDot color="#4D9B6A" label="Connected" />
+        {/* Orchestration */}
+        <Card title="Orchestration" icon={GitBranch}>
+          <Row label="Strategy">
+            <div className="flex items-center gap-2">
+              <ImmutableBadge />
+              <CodeValue>{config.orchestration.strategy}</CodeValue>
+            </div>
           </Row>
-          <Row label="Agent ID">
-            <span className="text-xs font-medium text-text">stello-agent-demo</span>
+          <Row label="MainSession">
+            <StatusDot configured={config.orchestration.hasMainSession} />
           </Row>
-          <Row label="Sessions">
-            <span className="text-xs font-medium text-text">7 active · 2 archived</span>
+          <Row label="TurnRunner">
+            <StatusDot configured={config.orchestration.hasTurnRunner} />
           </Row>
         </Card>
 
-        {/* Storage Mode */}
-        <Card title="Storage Mode">
-          <div className="flex gap-3">
-            <div className="flex-1 bg-primary rounded-[10px] p-4 cursor-pointer border-2 border-primary">
-              <div className="flex items-center gap-2 mb-1">
-                <HardDrive size={14} className="text-white" />
-                <span className="text-[13px] font-semibold text-white">RAM (In-Memory)</span>
-              </div>
-              <p className="text-[11px] text-white/60 leading-snug">Fast, data lost on restart. Best for quick debugging.</p>
-            </div>
-            <div className="flex-1 bg-card rounded-[10px] p-4 cursor-pointer border border-border">
-              <div className="flex items-center gap-2 mb-1">
-                <Database size={14} className="text-text" />
-                <span className="text-[13px] font-semibold text-text">File Persistence</span>
-              </div>
-              <p className="text-[11px] text-text-secondary leading-snug">Saves to temp directory. Survives restart.</p>
-            </div>
+        {/* Scheduling */}
+        <Card title="Scheduling Policy" icon={Clock}>
+          <div className="flex items-center gap-2 mb-3">
+            <ImmutableBadge />
+            {!config.scheduling.hasScheduler && <Tag variant="default">No scheduler — manual only</Tag>}
           </div>
-        </Card>
-
-        {/* Scheduling Policy */}
-        <Card title="Scheduling Policy">
           <div className="bg-surface rounded-lg p-3 mb-3">
             <p className="text-[11px] text-text-secondary leading-relaxed">
-              <span className="font-semibold text-text">Consolidation</span> (L3→L2): 将对话记录提炼为摘要。
-              <span className="font-semibold text-text"> Integration</span>: 综合所有子 Session 的 L2 生成 synthesis + insights。
-              设为 <code className="text-[10px] bg-muted px-1 rounded">manual</code> 时需手动触发（Conversation → L2 tab → Generate 按钮）。
+              <span className="font-semibold text-text">Consolidation</span> (L3→L2) 将对话记录提炼为摘要。
+              <span className="font-semibold text-text"> Integration</span> 综合所有子 Session 的 L2 生成 synthesis + insights。
             </p>
           </div>
           <Row label="Consolidation Trigger">
-            <Select value={consolidationTrigger} options={['manual', 'everyNTurns', 'onSwitch', 'onArchive', 'onLeave']} onChange={setConsolidationTrigger} />
+            <CodeValue>{config.scheduling.consolidation.trigger}</CodeValue>
           </Row>
-          {consolidationTrigger === 'everyNTurns' && (
-            <Row label="Every N Turns">
-              <NumberInput value={consolidationEveryN} onChange={setConsolidationEveryN} />
+          {config.scheduling.consolidation.everyNTurns && (
+            <Row label="Consolidation Every N">
+              <Value>{config.scheduling.consolidation.everyNTurns} turns</Value>
             </Row>
           )}
           <Row label="Integration Trigger">
-            <Select value={integrationTrigger} options={['manual', 'afterConsolidate', 'everyNTurns', 'onSwitch', 'onArchive', 'onLeave']} onChange={setIntegrationTrigger} />
+            <CodeValue>{config.scheduling.integration.trigger}</CodeValue>
           </Row>
-          {integrationTrigger === 'everyNTurns' && (
-            <Row label="Every N Turns">
-              <NumberInput value={integrationEveryN} onChange={setIntegrationEveryN} />
+          {config.scheduling.integration.everyNTurns && (
+            <Row label="Integration Every N">
+              <Value>{config.scheduling.integration.everyNTurns} turns</Value>
             </Row>
           )}
-          <Row label="System Prompt">
-            <div className="flex items-center gap-1 px-2.5 py-1 bg-primary-light rounded-md cursor-pointer">
-              <Pencil size={10} className="text-primary" />
-              <span className="text-[11px] font-medium text-primary">Edit</span>
-            </div>
-          </Row>
-        </Card>
-
-        {/* Runtime & Orchestration */}
-        <Card title="Runtime & Orchestration">
-          <Row label="Idle Recycle Delay">
-            <NumberInput value={idleTtlMs} unit="ms" onChange={setIdleTtlMs} />
-          </Row>
-          <Row label="Orchestration Strategy">
-            <Select value={strategy} options={['MainSessionFlat', 'HierarchicalOkr']} onChange={setStrategy} />
-          </Row>
         </Card>
 
         {/* Split Guard */}
-        <Card title="Split Guard">
-          <Row label="Min Turns Before Split">
-            <NumberInput value={minTurns} onChange={setMinTurns} />
+        <Card title="Split Guard" icon={Shield}>
+          <div className="flex items-center gap-2 mb-3">
+            <ImmutableBadge />
+          </div>
+          {config.splitGuard ? (
+            <>
+              <Row label="Min Turns Before Split">
+                <Value>{config.splitGuard.minTurns}</Value>
+              </Row>
+              <Row label="Cooldown Turns">
+                <Value>{config.splitGuard.cooldownTurns}</Value>
+              </Row>
+            </>
+          ) : (
+            <p className="text-[11px] text-text-muted italic">No SplitGuard configured — no split restrictions</p>
+          )}
+        </Card>
+
+        {/* Runtime */}
+        <Card title="Runtime" icon={Cpu}>
+          <Row label="Idle Recycle Delay">
+            <div className="flex items-center gap-2">
+              <Value>{config.runtime.idleTtlMs === 0 ? 'Immediate' : `${config.runtime.idleTtlMs} ms`}</Value>
+              <Tag variant="green">Hot-updatable</Tag>
+            </div>
           </Row>
-          <Row label="Cooldown Turns">
-            <NumberInput value={cooldownTurns} onChange={setCooldownTurns} />
+          <Row label="Runtime Resolver">
+            <StatusDot configured={config.runtime.hasResolver} label={config.runtime.hasResolver ? 'Custom' : 'Auto (from sessionResolver)'} />
           </Row>
         </Card>
 
-        {/* Registered Tools & Skills */}
-        <Card title="Registered Tools & Skills">
-          <p className="text-[10px] font-semibold text-text-muted tracking-wide mb-3">TOOLS</p>
-          <div className="space-y-2.5 mb-4">
-            {(config?.capabilities.tools ?? []).map((tool) => (
-              <div key={tool.name} className="flex items-center gap-2">
-                <Wrench size={14} className="text-primary shrink-0" />
-                <span className="text-xs font-medium text-text">{tool.name}</span>
-                <span className="text-[11px] text-text-muted">— {tool.description}</span>
-              </div>
-            ))}
-            {!config && (
-              <p className="text-[11px] text-text-muted italic">Loading...</p>
-            )}
-          </div>
-          <div className="h-px bg-border mb-4" />
-          <p className="text-[10px] font-semibold text-text-muted tracking-wide mb-3">SKILLS</p>
-          <div className="space-y-2.5">
-            {(config?.capabilities.skills ?? []).map((skill) => (
-              <div key={skill.name} className="flex items-center gap-2">
-                <Zap size={14} className="text-[#D89575] shrink-0" />
-                <span className="text-xs font-medium text-text">{skill.name}</span>
-                <span className="text-[11px] text-text-muted">— {skill.description}</span>
-              </div>
-            ))}
-            {!config && (
-              <p className="text-[11px] text-text-muted italic">Loading...</p>
-            )}
-          </div>
+        {/* Session Adapter */}
+        <Card title="Session Adapter" icon={Database}>
+          <p className="text-[10px] font-semibold text-text-muted tracking-wide mb-2">RESOLVERS</p>
+          <Row label="sessionResolver">
+            <StatusDot configured={config.session.hasSessionResolver} />
+          </Row>
+          <Row label="mainSessionResolver">
+            <StatusDot configured={config.session.hasMainSessionResolver} />
+          </Row>
+          <div className="h-px bg-border my-3" />
+          <p className="text-[10px] font-semibold text-text-muted tracking-wide mb-2">LIFECYCLE FUNCTIONS</p>
+          <Row label="consolidateFn">
+            <StatusDot configured={config.session.hasConsolidateFn} />
+          </Row>
+          <Row label="integrateFn">
+            <StatusDot configured={config.session.hasIntegrateFn} />
+          </Row>
+          <Row label="serializeSendResult">
+            <StatusDot configured={config.session.hasSerializeSendResult} label={config.session.hasSerializeSendResult ? 'Custom' : 'Default (JSON)'} />
+          </Row>
+          <Row label="toolCallParser">
+            <StatusDot configured={config.session.hasToolCallParser} label={config.session.hasToolCallParser ? 'Custom' : 'Default'} />
+          </Row>
+          {config.session.options && (
+            <>
+              <div className="h-px bg-border my-3" />
+              <p className="text-[10px] font-semibold text-text-muted tracking-wide mb-2">SESSION OPTIONS</p>
+              <pre className="text-[10px] font-mono bg-surface rounded-lg p-2 border border-border text-text-secondary overflow-x-auto">
+                {JSON.stringify(config.session.options, null, 2)}
+              </pre>
+            </>
+          )}
         </Card>
 
-        {/* Engine Hooks & Session Adapter */}
-        <Card title="Engine Hooks & Session Adapter">
-          <p className="text-[10px] font-semibold text-text-muted tracking-wide mb-3">SESSION ADAPTER</p>
-          <Row label="Adapter Mode">
-            <Tag variant="orange">sessionResolver + consolidateFn</Tag>
+        {/* Capabilities */}
+        <Card title="Capabilities" icon={Layers}>
+          <Row label="Lifecycle Adapter">
+            <StatusDot configured={config.capabilities.hasLifecycle} />
           </Row>
-          <Row label="ConsolidateFn">
-            <StatusDot color="#4D9B6A" label="Configured" />
-          </Row>
-          <Row label="IntegrateFn">
-            <StatusDot color="#4D9B6A" label="Configured" />
-          </Row>
-          <Row label="ConfirmProtocol">
-            <StatusDot color="#4D9B6A" label="Injected" />
+          <Row label="Confirm Protocol">
+            <StatusDot configured={config.capabilities.hasConfirm} />
           </Row>
 
-          <div className="h-px bg-border my-4" />
-          <p className="text-[10px] font-semibold text-text-muted tracking-wide mb-3">REGISTERED HOOKS</p>
-          <div className="space-y-2.5">
-            <div className="flex items-center gap-2">
-              <Webhook size={14} className="text-purple" />
-              <span className="text-xs font-medium text-text">onRoundEnd</span>
-              <Tag variant="purple">scheduler</Tag>
-              <Tag variant="orange">user</Tag>
+          <div className="h-px bg-border my-3" />
+          <Collapsible title="TOOLS" count={config.capabilities.tools.length} defaultOpen={config.capabilities.tools.length <= 5}>
+            {config.capabilities.tools.map((tool) => (
+              <div key={tool.name} className="flex items-start gap-2 pl-2">
+                <Wrench size={12} className="text-primary shrink-0 mt-0.5" />
+                <div className="min-w-0">
+                  <span className="text-xs font-medium text-text">{tool.name}</span>
+                  <p className="text-[10px] text-text-muted truncate">{tool.description}</p>
+                </div>
+              </div>
+            ))}
+            {config.capabilities.tools.length === 0 && (
+              <p className="text-[11px] text-text-muted italic pl-2">No tools registered</p>
+            )}
+          </Collapsible>
+
+          <div className="h-px bg-border my-3" />
+          <Collapsible title="SKILLS" count={config.capabilities.skills.length} defaultOpen={config.capabilities.skills.length <= 5}>
+            {config.capabilities.skills.map((skill) => (
+              <div key={skill.name} className="flex items-start gap-2 pl-2">
+                <Zap size={12} className="text-[#D89575] shrink-0 mt-0.5" />
+                <div className="min-w-0">
+                  <span className="text-xs font-medium text-text">{skill.name}</span>
+                  <p className="text-[10px] text-text-muted truncate">{skill.description}</p>
+                </div>
+              </div>
+            ))}
+            {config.capabilities.skills.length === 0 && (
+              <p className="text-[11px] text-text-muted italic pl-2">No skills registered</p>
+            )}
+          </Collapsible>
+        </Card>
+
+        {/* Hooks */}
+        <Card title="Engine Hooks" icon={Webhook}>
+          {config.hooks.length > 0 ? (
+            <div className="space-y-2">
+              {config.hooks.map((hook) => (
+                <div key={hook} className="flex items-center gap-2">
+                  <Webhook size={12} className="text-purple shrink-0" />
+                  <span className="text-xs font-medium text-text">{hook}</span>
+                </div>
+              ))}
             </div>
-            <div className="flex items-center gap-2">
-              <Webhook size={14} className="text-purple" />
-              <span className="text-xs font-medium text-text">onSessionLeave</span>
-              <Tag variant="purple">scheduler</Tag>
-            </div>
-            <div className="flex items-center gap-2">
-              <Webhook size={14} className="text-purple" />
-              <span className="text-xs font-medium text-text">onSessionArchive</span>
-              <Tag variant="purple">scheduler</Tag>
-            </div>
-          </div>
+          ) : (
+            <p className="text-[11px] text-text-muted italic">No hooks registered</p>
+          )}
         </Card>
       </div>
     </div>

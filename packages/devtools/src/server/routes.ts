@@ -152,15 +152,45 @@ export function createRoutes(
     return c.json({ ok: true })
   })
 
-  /** 获取 agent 配置（完整序列化） */
+  /** 获取 agent 配置（完整只读序列化） */
   app.get('/config', (c) => {
     const config = agent.config
+    const schedulerConfig = config.orchestration?.scheduler?.getConfig?.()
+    const splitGuardConfig = config.orchestration?.splitGuard?.getConfig?.()
+
+    /* 解析 hooks 的已注册 key 列表 */
+    const hooksProvider = config.orchestration?.hooks
+    let hookKeys: string[] = []
+    if (typeof hooksProvider === 'function') {
+      hookKeys = ['(per-session factory)']
+    } else if (hooksProvider) {
+      hookKeys = Object.keys(hooksProvider)
+    }
+
     return c.json({
       orchestration: {
         strategy: config.orchestration?.strategy?.constructor?.name ?? 'MainSessionFlatStrategy',
+        hasMainSession: !!config.orchestration?.mainSession,
+        hasTurnRunner: !!config.orchestration?.turnRunner,
       },
       runtime: {
         idleTtlMs: config.runtime?.recyclePolicy?.idleTtlMs ?? 0,
+        hasResolver: !!config.runtime?.resolver,
+      },
+      scheduling: {
+        consolidation: schedulerConfig?.consolidation ?? { trigger: 'manual' },
+        integration: schedulerConfig?.integration ?? { trigger: 'manual' },
+        hasScheduler: !!config.orchestration?.scheduler,
+      },
+      splitGuard: splitGuardConfig ?? null,
+      session: {
+        hasSessionResolver: !!config.session?.sessionResolver,
+        hasMainSessionResolver: !!config.session?.mainSessionResolver,
+        hasConsolidateFn: !!config.session?.consolidateFn,
+        hasIntegrateFn: !!config.session?.integrateFn,
+        hasSerializeSendResult: !!config.session?.serializeSendResult,
+        hasToolCallParser: !!config.session?.toolCallParser,
+        options: config.session?.options ?? null,
       },
       capabilities: {
         tools: config.capabilities.tools.getToolDefinitions(),
@@ -168,48 +198,14 @@ export function createRoutes(
           name: s.name,
           description: s.description,
         })),
+        hasLifecycle: !!config.capabilities.lifecycle,
+        hasConfirm: !!config.capabilities.confirm,
       },
-      /* 标记哪些配置是 immutable 的（需重启才能生效） */
-      immutable: ['orchestration.strategy', 'scheduling.trigger', 'splitGuard'],
+      hooks: hookKeys,
     })
   })
 
-  /** 更新 agent 配置 */
-  app.patch('/config', async (c) => {
-    const updates = await c.req.json<Record<string, unknown>>()
-    const applied: string[] = []
-    const needsRestart: string[] = []
-
-    /* 调度策略——immutable，标记需重启 */
-    if (updates['consolidationTrigger'] || updates['integrationTrigger'] ||
-        updates['consolidationEveryN'] || updates['integrationEveryN']) {
-      needsRestart.push('scheduling')
-    }
-
-    /* SplitGuard——immutable，标记需重启 */
-    if (updates['minTurns'] !== undefined || updates['cooldownTurns'] !== undefined) {
-      needsRestart.push('splitGuard')
-    }
-
-    /* Strategy——immutable */
-    if (updates['strategy'] !== undefined) {
-      needsRestart.push('orchestration.strategy')
-    }
-
-    /* idleTtlMs——可以动态修改 recyclePolicy */
-    if (updates['idleTtlMs'] !== undefined) {
-      applied.push('runtime.idleTtlMs')
-    }
-
-    return c.json({
-      ok: true,
-      applied,
-      needsRestart,
-      note: needsRestart.length > 0
-        ? `These changes require agent restart to take effect: ${needsRestart.join(', ')}`
-        : 'All changes applied.',
-    })
-  })
+  /* PATCH /config 暂不开放——当前配置为只读；后续热更新时再实现 */
 
   /** 获取事件历史 */
   app.get('/events', (c) => {
