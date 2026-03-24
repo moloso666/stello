@@ -11,7 +11,11 @@ function withErrorHandler(app: Hono): void {
 }
 
 /** 创建 DevTools REST 路由 */
-export function createRoutes(agent: StelloAgent, onEvent?: (event: { type: string; sessionId?: string; data?: Record<string, unknown> }) => void): Hono {
+export function createRoutes(
+  agent: StelloAgent,
+  onEvent?: (event: { type: string; sessionId?: string; data?: Record<string, unknown> }) => void,
+  getEventHistory?: () => Array<{ type: string; sessionId?: string; timestamp: string; data?: Record<string, unknown> }>,
+): Hono {
   const app = new Hono()
   withErrorHandler(app)
 
@@ -172,6 +176,12 @@ export function createRoutes(agent: StelloAgent, onEvent?: (event: { type: strin
         ? `These changes require agent restart to take effect: ${needsRestart.join(', ')}`
         : 'All changes applied.',
     })
+  })
+
+  /** 获取事件历史 */
+  app.get('/events', (c) => {
+    const events = getEventHistory?.() ?? []
+    return c.json({ events })
   })
 
   return app

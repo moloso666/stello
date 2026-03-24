@@ -10,9 +10,15 @@ export interface DevtoolsEvent {
 
 type EventListener = (event: DevtoolsEvent) => void
 
-/** 事件总线——收集 agent 操作事件，广播给所有 WS 客户端 */
+/** 事件总线——收集 agent 操作事件，广播 + 保留历史 */
 export class EventBus {
   private listeners = new Set<EventListener>()
+  private history: DevtoolsEvent[] = []
+  private maxHistory: number
+
+  constructor(maxHistory = 500) {
+    this.maxHistory = maxHistory
+  }
 
   /** 订阅事件 */
   on(listener: EventListener): () => void {
@@ -20,10 +26,19 @@ export class EventBus {
     return () => this.listeners.delete(listener)
   }
 
-  /** 广播事件 */
+  /** 广播事件并存入历史 */
   emit(event: Omit<DevtoolsEvent, 'timestamp'>): void {
     const full: DevtoolsEvent = { ...event, timestamp: new Date().toISOString() }
+    this.history.push(full)
+    if (this.history.length > this.maxHistory) {
+      this.history = this.history.slice(-this.maxHistory)
+    }
     this.listeners.forEach((fn) => fn(full))
+  }
+
+  /** 获取事件历史 */
+  getHistory(): DevtoolsEvent[] {
+    return [...this.history]
   }
 }
 

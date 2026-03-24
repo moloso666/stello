@@ -94,8 +94,12 @@ export async function startDevtools(
   /* Proxy 包装 agent，拦截操作自动广播事件 */
   const wrappedAgent = wrapAgentWithEvents(agent, eventBus)
 
-  /* API 路由——用包装后的 agent + 事件回调 */
-  const api = createRoutes(wrappedAgent, (event) => eventBus.emit(event))
+  /* API 路由——用包装后的 agent + 事件回调 + 历史查询 */
+  const api = createRoutes(
+    wrappedAgent,
+    (event) => eventBus.emit(event),
+    () => eventBus.getHistory(),
+  )
   app.route('/api', api)
 
   /* 前端静态文件 */

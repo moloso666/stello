@@ -67,8 +67,33 @@ export function Events() {
   const [wsConnected, setWsConnected] = useState(false)
   const nextIdRef = useRef(100)
 
-  /* 直接管理 WS 连接——不依赖全局单例 */
+  /** 将 raw event 转成 StelloEvent */
+  const parseEvent = (msg: Record<string, unknown>): StelloEvent | null => {
+    const rawType = String(msg['type'] ?? '')
+    const eventType = wsTypeToEventType(rawType)
+    if (!eventType) return null
+    const data = msg['data'] as Record<string, unknown> | undefined
+    const desc = data
+      ? Object.entries(data).map(([k, v]) => `${k}: ${String(v).slice(0, 50)}`).join(' · ')
+      : rawType
+    return {
+      id: String(nextIdRef.current++),
+      time: msg['timestamp'] ? formatTime(new Date(String(msg['timestamp']))) : formatTime(new Date()),
+      type: eventType,
+      session: String(msg['sessionId'] ?? '—'),
+      description: `${rawType}${desc !== rawType ? ` — ${desc}` : ''}`,
+    }
+  }
+
+  /* 挂载时拉历史 + WS 接增量 */
   useEffect(() => {
+    /* 1. 拉历史 */
+    fetch('/api/events').then((r) => r.json()).then((body: { events: Array<Record<string, unknown>> }) => {
+      const hist = body.events.map(parseEvent).filter((e): e is StelloEvent => e !== null).reverse()
+      setEvents(hist)
+    }).catch(() => {})
+
+    /* 2. WS 接增量 */
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
     const url = `${protocol}//${window.location.host}/ws`
     let ws: WebSocket | null = null
@@ -78,31 +103,13 @@ export function Events() {
       if (closed) return
       ws = new WebSocket(url)
       ws.onopen = () => setWsConnected(true)
-      ws.onclose = () => {
-        setWsConnected(false)
-        if (!closed) setTimeout(connect, 3000)
-      }
+      ws.onclose = () => { setWsConnected(false); if (!closed) setTimeout(connect, 3000) }
       ws.onerror = () => ws?.close()
       ws.onmessage = (event) => {
         try {
           const msg = JSON.parse(event.data as string) as Record<string, unknown>
-          const rawType = String(msg['type'] ?? '')
-          const eventType = wsTypeToEventType(rawType)
-          if (!eventType) return
-
-          const data = msg['data'] as Record<string, unknown> | undefined
-          const desc = data
-            ? Object.entries(data).map(([k, v]) => `${k}: ${String(v).slice(0, 50)}`).join(' · ')
-            : rawType
-
-          const newEvent: StelloEvent = {
-            id: String(nextIdRef.current++),
-            time: msg['timestamp'] ? formatTime(new Date(String(msg['timestamp']))) : formatTime(new Date()),
-            type: eventType,
-            session: String(msg['sessionId'] ?? '—'),
-            description: `${rawType}${desc !== rawType ? ` — ${desc}` : ''}`,
-          }
-          setEvents((prev) => [newEvent, ...prev])
+          const parsed = parseEvent(msg)
+          if (parsed) setEvents((prev) => [parsed, ...prev])
         } catch { /* ignore */ }
       }
     }
