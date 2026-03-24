@@ -1,7 +1,7 @@
 import { useRef, useEffect, useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { GitBranch, Archive, MessageSquare, Search, X } from 'lucide-react'
-import { fetchSessionTree, type SessionTreeNode } from '@/lib/api'
+import { fetchSessionTree, fetchSessionDetail, type SessionTreeNode, type SessionDetail } from '@/lib/api'
 
 /** 拓扑节点（前端渲染用，合并 meta + topology） */
 interface TopoNode {
@@ -261,6 +261,7 @@ export function Topology() {
   const [tooltip, setTooltip] = useState<TooltipState>({ visible: false, x: 0, y: 0, node: null })
   const [selectedNode, setSelectedNode] = useState<LayoutNode | null>(null)
   const [panelOpen, setPanelOpen] = useState(false)
+  const [panelDetail, setPanelDetail] = useState<SessionDetail | null>(null)
   const navigate = useNavigate()
 
   /* Camera ref（不触发 re-render，rAF 循环直接读取） */
@@ -456,6 +457,10 @@ export function Topology() {
         const node = nodesRef.current.find((n) => n.id === drag.draggingNodeId)
         setSelectedNode(node ?? null)
         setPanelOpen(true)
+        setPanelDetail(null)
+        if (node) {
+          fetchSessionDetail(node.id).then(setPanelDetail).catch(() => {})
+        }
       } else {
         setPanelOpen(false)
       }
@@ -600,19 +605,40 @@ export function Topology() {
 
             <div className="h-px bg-[#3D3530]" />
 
-            {/* 属性行——提高亮度对比 */}
-            {[
-              { label: 'Status', value: selectedNode.status, color: selectedNode.status === 'active' ? '#C4793D' : '#A8A7A5' },
-              { label: 'Turns', value: String(selectedNode.turns), color: '#F0EDE8' },
-              { label: 'L2 Memory', value: 'Available', color: '#C4793D' },
-              { label: 'Children', value: selectedNode.children.length > 0 ? `${selectedNode.children.length} (${selectedNode.children.join(', ')})` : 'None', color: '#F0EDE8' },
-              { label: 'Last Active', value: '2 min ago', color: '#D1CEC8' },
-            ].map(({ label, value, color }) => (
-              <div key={label} className="flex items-center justify-between">
-                <span className="text-xs font-medium text-[#A8A7A5]">{label}</span>
-                <span className="text-xs font-semibold" style={{ color }}>{value}</span>
+            {/* 属性行 */}
+            {(() => {
+              /* Children 用 label 而不是 UUID */
+              const childLabels = selectedNode.children
+                .map((cid) => nodesRef.current.find((n) => n.id === cid)?.label ?? cid.slice(0, 8))
+              const childrenText = childLabels.length > 0 ? `${childLabels.length} (${childLabels.join(', ')})` : 'None'
+              /* L2 从 detail 读 */
+              const l2Status = panelDetail?.l2 ? 'Consolidated' : panelDetail === null ? 'Loading...' : 'None'
+              const l2Color = panelDetail?.l2 ? '#C4793D' : '#A8A7A5'
+              /* turnCount 从 detail 读 */
+              const turns = panelDetail?.meta?.turnCount ?? selectedNode.turns
+
+              return [
+                { label: 'Status', value: selectedNode.status, color: selectedNode.status === 'active' ? '#C4793D' : '#A8A7A5' },
+                { label: 'Turns', value: String(turns), color: '#F0EDE8' },
+                { label: 'L2 Memory', value: l2Status, color: l2Color },
+                { label: 'Children', value: childrenText, color: '#F0EDE8' },
+              ]
+            })().map(({ label, value, color }) => (
+              <div key={label} className="flex items-center justify-between gap-3">
+                <span className="text-xs font-medium text-[#A8A7A5] shrink-0">{label}</span>
+                <span className="text-xs font-semibold text-right truncate" style={{ color }}>{value}</span>
               </div>
             ))}
+
+            {/* L2 内容预览（如果有） */}
+            {panelDetail?.l2 && (
+              <div className="bg-[#FFFFFF08] rounded-lg p-3 mt-1">
+                <p className="text-[10px] font-semibold text-[#A8A7A5] tracking-wide mb-1.5">L2 SUMMARY</p>
+                <p className="text-[11px] text-[#D1CEC8] leading-relaxed">
+                  {panelDetail.l2.length > 150 ? panelDetail.l2.slice(0, 150) + '...' : panelDetail.l2}
+                </p>
+              </div>
+            )}
 
             <div className="h-px bg-[#3D3530]" />
 

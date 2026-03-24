@@ -83,61 +83,66 @@ function wrapSession(coreSessionId: string, session: Session) {
 }
 
 /** 简易内存 MemoryEngine，仅用于 demo */
-function createInMemoryMemoryEngine(sessions: SessionTreeImpl): MemoryEngine {
-  const core: Record<string, unknown> = {
-    name: schema.name.default,
-    goal: schema.goal.default,
-    topics: schema.topics.default,
-  }
-  const memories = new Map<string, string>()
-  const scopes = new Map<string, string>()
-  const indexes = new Map<string, string>()
-  const recordStore = new Map<string, TurnRecord[]>()
+/** 文件持久化 MemoryEngine */
+function createFileMemoryEngine(fs: NodeFileSystemAdapter, sessions: SessionTreeImpl): MemoryEngine {
+  const corePath = 'memory/core.json'
+  const memPath = (id: string) => `memory/sessions/${id}/memory.json`
+  const scopePath = (id: string) => `memory/sessions/${id}/scope.json`
+  const indexPath = (id: string) => `memory/sessions/${id}/index.json`
+  const recordsPath = (id: string) => `memory/sessions/${id}/records.json`
 
   return {
     async readCore(path?: string) {
-      if (!path) return { ...core }
-      return core[path]
+      const data = (await fs.readJSON<Record<string, unknown>>(corePath)) ?? {
+        name: schema.name.default,
+        goal: schema.goal.default,
+        topics: schema.topics.default,
+      }
+      if (!path) return data
+      return data?.[path]
     },
     async writeCore(path: string, value: unknown) {
-      core[path] = value
+      const data = await this.readCore() as Record<string, unknown>
+      data[path] = value
+      await fs.writeJSON(corePath, data)
     },
     async readMemory(sessionId: string) {
-      return memories.get(sessionId) ?? null
+      return fs.readJSON<string>(memPath(sessionId)).catch(() => null)
     },
     async writeMemory(sessionId: string, content: string) {
-      memories.set(sessionId, content)
+      await fs.writeJSON(memPath(sessionId), content)
     },
     async readScope(sessionId: string) {
-      return scopes.get(sessionId) ?? null
+      return fs.readJSON<string>(scopePath(sessionId)).catch(() => null)
     },
     async writeScope(sessionId: string, content: string) {
-      scopes.set(sessionId, content)
+      await fs.writeJSON(scopePath(sessionId), content)
     },
     async readIndex(sessionId: string) {
-      return indexes.get(sessionId) ?? null
+      return fs.readJSON<string>(indexPath(sessionId)).catch(() => null)
     },
     async writeIndex(sessionId: string, content: string) {
-      indexes.set(sessionId, content)
+      await fs.writeJSON(indexPath(sessionId), content)
     },
     async appendRecord(sessionId: string, record: TurnRecord) {
-      const list = recordStore.get(sessionId) ?? []
+      const list = (await fs.readJSON<TurnRecord[]>(recordsPath(sessionId))) ?? []
       list.push(record)
-      recordStore.set(sessionId, list)
+      await fs.writeJSON(recordsPath(sessionId), list)
     },
     async readRecords(sessionId: string) {
-      return recordStore.get(sessionId) ?? []
+      return (await fs.readJSON<TurnRecord[]>(recordsPath(sessionId))) ?? []
     },
     async assembleContext(sessionId: string) {
+      const core = await this.readCore() as Record<string, unknown>
       const session = await sessions.get(sessionId)
-      const currentMemory = memories.get(sessionId) ?? null
-      const scope = scopes.get(sessionId) ?? null
+      const currentMemory = await this.readMemory(sessionId)
+      const scope = await this.readScope(sessionId)
       const parentMemories: string[] = []
       if (session?.parentId) {
-        const parentMem = memories.get(session.parentId)
+        const parentMem = await this.readMemory(session.parentId)
         if (parentMem) parentMemories.push(parentMem)
       }
-      return { core: { ...core }, memories: parentMemories, currentMemory, scope }
+      return { core, memories: parentMemories, currentMemory, scope }
     },
   }
 }
@@ -171,9 +176,15 @@ async function bootstrap() {
     },
   ] as const
 
-  const memory = createInMemoryMemoryEngine(sessions)
+  const memory = createFileMemoryEngine(fs, sessions)
 
-  const root = await sessions.createRoot('Main Session')
+  /* 复用已有 root session 或创建新的 */
+  let root: SessionMeta
+  try {
+    root = await sessions.getRoot()
+  } catch {
+    root = await sessions.createRoot('Main Session')
+  }
   currentSessionId = root.id
 
   const mainSession = await createMainSession({
@@ -184,6 +195,24 @@ async function bootstrap() {
     tools: [...sessionTools],
   })
   sessionMap.set(root.id, { main: mainSession })
+
+  /* 恢复已有的子 session 运行时实例 */
+  const allSessions = await sessions.listAll()
+  for (const meta of allSessions) {
+    if (meta.id === root.id) continue
+    if (sessionMap.has(meta.id)) continue
+    const childSession = await createSession({
+      storage: sessionStorage,
+      llm,
+      label: meta.label,
+      systemPrompt: `你当前专注于子话题：${meta.scope ?? meta.label}。回答时只围绕当前子话题。当用户明确要求创建新的子 session / 子会话时，必须调用 stello_create_session 工具。`,
+      tools: [...sessionTools],
+    })
+    sessionMap.set(meta.id, { session: childSession })
+  }
+  if (allSessions.length > 1) {
+    console.log(`Restored ${allSessions.length - 1} child session(s) from disk`)
+  }
 
   const lifecycle: EngineLifecycleAdapter = {
     bootstrap: async (sessionId) => ({
