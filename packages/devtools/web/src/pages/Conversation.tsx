@@ -9,6 +9,7 @@ import {
   Loader2,
 } from 'lucide-react'
 import { fetchSessions, fetchConfig, sendTurn, type SessionNode, type AgentConfig } from '@/lib/api'
+import { sendWs, subscribeWs } from '@/lib/ws'
 
 /** Session 列表项 */
 interface SessionItem {
@@ -114,7 +115,7 @@ export function Conversation() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [selectedSession, messages])
 
-  /** 发送消息 */
+  /** 尝试流式发送（WS），fallback 非流式（REST） */
   const handleSend = async () => {
     const text = inputValue.trim()
     if (!text || sending) return
@@ -124,20 +125,94 @@ export function Conversation() {
     setInputValue('')
     setSending(true)
 
+    const botId = String(nextIdRef.current++)
+
+    /* 先尝试 WS 流式 */
     try {
-      const result = await sendTurn(selectedSession.id, text)
-      const response = typeof result === 'object' && result !== null && 'response' in result
-        ? String((result as { response: string }).response)
-        : JSON.stringify(result)
-      const botMsg: ChatMessage = { id: String(nextIdRef.current++), role: 'assistant', content: response }
-      setMessages((prev) => [...prev, botMsg])
-    } catch (err) {
-      const errMsg: ChatMessage = {
-        id: String(nextIdRef.current++),
-        role: 'assistant',
-        content: `⚠ Error: ${err instanceof Error ? err.message : 'Failed to send'}`,
+      /* 先 enter session（如果还没进） */
+      sendWs({ type: 'session.enter', sessionId: selectedSession.id })
+
+      /* 创建一个空的 assistant 消息占位 */
+      setMessages((prev) => [...prev, { id: botId, role: 'assistant', content: '' }])
+
+      /* 监听流式响应 */
+      let resolved = false
+      await new Promise<void>((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          if (!resolved) { resolved = true; reject(new Error('Stream timeout')) }
+        }, 30000)
+
+        const unsub = subscribeWs((msg) => {
+          const type = msg['type'] as string
+          if (type === 'stream.delta') {
+            const chunk = String(msg['chunk'] ?? '')
+            setMessages((prev) =>
+              prev.map((m) => m.id === botId ? { ...m, content: m.content + chunk } : m)
+            )
+          } else if (type === 'stream.end') {
+            clearTimeout(timeout)
+            unsub()
+            resolved = true
+            /* 用完整结果替换 */
+            const result = msg['result']
+            if (result && typeof result === 'object' && 'response' in (result as Record<string, unknown>)) {
+              setMessages((prev) =>
+                prev.map((m) => m.id === botId ? { ...m, content: String((result as { response: string }).response) } : m)
+              )
+            }
+            resolve()
+          } else if (type === 'turn.complete') {
+            /* 非流式回退：server 返回了 turn.complete 而不是 stream */
+            clearTimeout(timeout)
+            unsub()
+            resolved = true
+            const result = msg['result']
+            const response = result && typeof result === 'object' && 'response' in (result as Record<string, unknown>)
+              ? String((result as { response: string }).response)
+              : JSON.stringify(result)
+            setMessages((prev) =>
+              prev.map((m) => m.id === botId ? { ...m, content: response } : m)
+            )
+            resolve()
+          } else if (type === 'error') {
+            clearTimeout(timeout)
+            unsub()
+            resolved = true
+            reject(new Error(String(msg['message'] ?? 'WS error')))
+          }
+        })
+
+        sendWs({ type: 'session.stream', input: text })
+      })
+    } catch {
+      /* WS 失败，fallback REST */
+      try {
+        const result = await sendTurn(selectedSession.id, text)
+        const response = typeof result === 'object' && result !== null && 'response' in result
+          ? String((result as { response: string }).response)
+          : JSON.stringify(result)
+        setMessages((prev) =>
+          prev.map((m) => m.id === botId ? { ...m, content: response } : m)
+            .filter((m) => m.content !== '') /* 清除空占位 */
+            .concat(prev.find((m) => m.id === botId && m.content === '')
+              ? [{ id: botId, role: 'assistant' as const, content: response }]
+              : [])
+        )
+      } catch (err) {
+        setMessages((prev) => {
+          const existing = prev.find((m) => m.id === botId)
+          if (existing && existing.content === '') {
+            return prev.map((m) => m.id === botId
+              ? { ...m, content: `⚠ Error: ${err instanceof Error ? err.message : 'Failed to send'}` }
+              : m)
+          }
+          return [...prev, {
+            id: botId,
+            role: 'assistant' as const,
+            content: `⚠ Error: ${err instanceof Error ? err.message : 'Failed to send'}`,
+          }]
+        })
       }
-      setMessages((prev) => [...prev, errMsg])
     } finally {
       setSending(false)
     }

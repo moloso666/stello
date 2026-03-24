@@ -65,6 +65,26 @@ export function archiveSession(sessionId: string) {
   })
 }
 
+/** L3 对话记录 */
+export interface TurnRecord {
+  role: string
+  content: string
+  timestamp?: string
+}
+
+/** Session 详细数据 */
+export interface SessionDetail {
+  node: SessionNode
+  records: TurnRecord[]
+  l2: string | null
+  scope: string | null
+}
+
+/** 获取 session 详细数据 */
+export function fetchSessionDetail(id: string) {
+  return request<SessionDetail>(`/sessions/${id}/detail`)
+}
+
 /** 获取 agent 配置 */
 export function fetchConfig() {
   return request<AgentConfig>('/config')

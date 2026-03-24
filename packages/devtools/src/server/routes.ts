@@ -19,6 +19,19 @@ export function createRoutes(agent: StelloAgent): Hono {
     return c.json(node)
   })
 
+  /** 获取 session 详细数据（L3/L2/scope 等） */
+  app.get('/sessions/:id/detail', async (c) => {
+    const id = c.req.param('id')
+    const memory = agent.config.memory
+    const [node, records, l2, scope] = await Promise.all([
+      agent.sessions.get(id),
+      memory.readRecords(id).catch(() => []),
+      memory.readMemory(id).catch(() => null),
+      memory.readScope(id).catch(() => null),
+    ])
+    return c.json({ node, records, l2, scope })
+  })
+
   /** 非流式对话 */
   app.post('/sessions/:id/turn', async (c) => {
     const id = c.req.param('id')
