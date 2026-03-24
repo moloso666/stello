@@ -81,11 +81,13 @@ function RoleBadge({ role }: { role: 'user' | 'asst' | 'tool' }) {
 export function Conversation() {
   const [sessions, setSessions] = useState(mockSessions)
   const [selectedSession, setSelectedSession] = useState(mockSessions[0]!)
+  const [messages, setMessages] = useState<ChatMessage[]>(mockMessages)
   const [activeTab, setActiveTab] = useState<'l3' | 'l2' | 'insights' | 'prompt'>('l3')
   const [inputValue, setInputValue] = useState('')
   const [sending, setSending] = useState(false)
   const [config, setConfig] = useState<AgentConfig | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const nextIdRef = useRef(100)
 
   /* 从 API 拉取 session 列表 */
   useEffect(() => {
@@ -110,7 +112,36 @@ export function Conversation() {
   /* 消息列表自动滚到底部 */
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [selectedSession])
+  }, [selectedSession, messages])
+
+  /** 发送消息 */
+  const handleSend = async () => {
+    const text = inputValue.trim()
+    if (!text || sending) return
+
+    const userMsg: ChatMessage = { id: String(nextIdRef.current++), role: 'user', content: text }
+    setMessages((prev) => [...prev, userMsg])
+    setInputValue('')
+    setSending(true)
+
+    try {
+      const result = await sendTurn(selectedSession.id, text)
+      const response = typeof result === 'object' && result !== null && 'response' in result
+        ? String((result as { response: string }).response)
+        : JSON.stringify(result)
+      const botMsg: ChatMessage = { id: String(nextIdRef.current++), role: 'assistant', content: response }
+      setMessages((prev) => [...prev, botMsg])
+    } catch (err) {
+      const errMsg: ChatMessage = {
+        id: String(nextIdRef.current++),
+        role: 'assistant',
+        content: `⚠ Error: ${err instanceof Error ? err.message : 'Failed to send'}`,
+      }
+      setMessages((prev) => [...prev, errMsg])
+    } finally {
+      setSending(false)
+    }
+  }
 
   return (
     <div className="flex h-full">
@@ -181,7 +212,7 @@ export function Conversation() {
 
         {/* 消息流 */}
         <div className="flex-1 overflow-y-auto bg-surface px-6 py-5 space-y-4">
-          {mockMessages.map((msg, i) => (
+          {messages.map((msg, i) => (
             <div
               key={msg.id}
               className="page-enter"
@@ -222,19 +253,24 @@ export function Conversation() {
               type="text"
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter' && inputValue.trim()) setInputValue('') }}
+              onKeyDown={(e) => { if (e.key === 'Enter') handleSend() }}
               placeholder="Send a message or simulate a tool call..."
               className="flex-1 bg-transparent text-xs outline-none placeholder:text-text-muted"
             />
           </div>
           <button
+            onClick={handleSend}
+            disabled={!inputValue.trim() || sending}
             className={`w-9 h-9 rounded-lg flex items-center justify-center transition-all duration-200 ${
-              inputValue.trim()
+              inputValue.trim() && !sending
                 ? 'bg-primary hover:bg-primary/90 scale-100 shadow-md'
                 : 'bg-primary/40 scale-95'
             }`}
           >
-            <ArrowUp size={16} className="text-white" />
+            {sending
+              ? <Loader2 size={16} className="text-white animate-spin" />
+              : <ArrowUp size={16} className="text-white" />
+            }
           </button>
         </div>
       </div>

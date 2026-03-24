@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
+import { subscribeWs } from '@/lib/ws'
 
 /** 事件类型 */
 type EventType = 'turn:start' | 'turn:end' | 'consolidate' | 'integrate' | 'fork' | 'error'
@@ -46,13 +47,52 @@ const mockEvents: StelloEvent[] = [
   { id: '10', time: '10:31:30', type: 'turn:end', session: 'research', description: 'Turn #11 completed · 1 tool call · 0.6s' },
 ]
 
+/** 将 WS 消息类型映射为 EventType */
+function wsTypeToEventType(type: string): EventType | null {
+  const map: Record<string, EventType> = {
+    'turn.complete': 'turn:end',
+    'session.entered': 'turn:start',
+    'stream.end': 'turn:end',
+    'session.forked': 'fork',
+    'error': 'error',
+  }
+  return map[type] ?? null
+}
+
+/** 格式化时间戳 */
+function formatTime(date: Date): string {
+  return date.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })
+}
+
 /** Events 事件流页面 */
 export function Events() {
   const [activeFilter, setActiveFilter] = useState('all')
+  const [events, setEvents] = useState<StelloEvent[]>(mockEvents)
+  const [wsConnected, setWsConnected] = useState(false)
+  const nextIdRef = useRef(100)
+
+  /* 订阅 WS 事件 */
+  useEffect(() => {
+    const unsub = subscribeWs((msg) => {
+      setWsConnected(true)
+      const type = wsTypeToEventType(String(msg['type'] ?? ''))
+      if (!type) return
+
+      const newEvent: StelloEvent = {
+        id: String(nextIdRef.current++),
+        time: formatTime(new Date()),
+        type,
+        session: String(msg['sessionId'] ?? msg['session'] ?? '—'),
+        description: String(msg['description'] ?? msg['message'] ?? JSON.stringify(msg).slice(0, 80)),
+      }
+      setEvents((prev) => [newEvent, ...prev])
+    })
+    return unsub
+  }, [])
 
   const filtered = activeFilter === 'all'
-    ? mockEvents
-    : mockEvents.filter((e) => {
+    ? events
+    : events.filter((e) => {
         const opt = filterOptions.find((f) => f.key === activeFilter)
         return opt?.types.includes(e.type)
       })
@@ -63,8 +103,10 @@ export function Events() {
       <div className="flex items-center justify-between h-13 px-6 border-b border-border shrink-0">
         <h2 className="text-[15px] font-semibold text-text">Event Stream</h2>
         <div className="flex items-center gap-1.5">
-          <div className="w-2 h-2 rounded-full bg-success animate-pulse shadow-[0_0_6px_rgba(77,155,106,0.6)]" />
-          <span className="text-xs font-medium text-success">Live</span>
+          <div className={`w-2 h-2 rounded-full ${wsConnected ? 'bg-success animate-pulse shadow-[0_0_6px_rgba(77,155,106,0.6)]' : 'bg-text-muted'}`} />
+          <span className={`text-xs font-medium ${wsConnected ? 'text-success' : 'text-text-muted'}`}>
+            {wsConnected ? 'Live' : 'Offline'}
+          </span>
         </div>
       </div>
 
