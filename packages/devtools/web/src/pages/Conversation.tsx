@@ -8,7 +8,7 @@ import {
   ArrowDownRight,
   Loader2,
 } from 'lucide-react'
-import { fetchSessions, fetchConfig, sendTurn, type SessionNode, type AgentConfig } from '@/lib/api'
+import { fetchSessions, fetchConfig, fetchSessionDetail, sendTurn, type SessionNode, type AgentConfig } from '@/lib/api'
 import { sendWs, subscribeWs } from '@/lib/ws'
 
 /** Session 列表项 */
@@ -109,6 +109,29 @@ export function Conversation() {
       .catch(() => {})
     fetchConfig().then(setConfig).catch(() => {})
   }, [])
+
+  /* 切换 session 时拉取该 session 的 L3 对话记录 */
+  useEffect(() => {
+    fetchSessionDetail(selectedSession.id)
+      .then((detail) => {
+        if (detail.records.length > 0) {
+          const msgs: ChatMessage[] = detail.records.map((r, i) => ({
+            id: `hist-${i}`,
+            role: r.role === 'user' ? 'user' as const : 'assistant' as const,
+            content: r.content,
+          }))
+          setMessages(msgs)
+        } else {
+          setMessages([])
+        }
+      })
+      .catch(() => {
+        /* API 不可用时保持 mock 数据（首次）或清空 */
+        if (selectedSession.id !== mockSessions[0]?.id) {
+          setMessages([])
+        }
+      })
+  }, [selectedSession.id])
 
   /* 消息列表自动滚到底部 */
   useEffect(() => {
