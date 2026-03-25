@@ -19,6 +19,7 @@ import {
   Clock,
 } from 'lucide-react'
 import { fetchSessions, fetchConfig, fetchSessionDetail, enterSession, consolidateSession, type AgentConfig, type SessionDetail } from '@/lib/api'
+import { useI18n } from '@/lib/i18n'
 
 /** Session 列表项 */
 interface SessionItem {
@@ -65,6 +66,7 @@ function parseThinkContent(text: string): { think: string | null; content: strin
 
 /** Markdown 渲染的 assistant 消息 */
 function MarkdownMessage({ text, streaming }: { text: string; streaming?: boolean }) {
+  const { t } = useI18n()
   const { think, content } = useMemo(() => parseThinkContent(text), [text])
   const displayText = content || (streaming ? '' : text)
 
@@ -73,7 +75,7 @@ function MarkdownMessage({ text, streaming }: { text: string; streaming?: boolea
       {think && (
         <details className="group">
           <summary className="text-[10px] text-text-muted cursor-pointer hover:text-text-secondary transition-colors">
-            Thinking...
+            {t('conv.thinking')}
           </summary>
           <div className="mt-1 px-3 py-2 bg-surface rounded-lg border border-border/30 text-[11px] text-text-muted leading-relaxed whitespace-pre-wrap">
             {think}
@@ -90,6 +92,7 @@ function MarkdownMessage({ text, streaming }: { text: string; streaming?: boolea
 
 /** 折叠式 tool call 卡片 */
 function ToolCallCard({ toolCall }: { toolCall: ToolCallInfo }) {
+  const { t } = useI18n()
   const [open, setOpen] = useState(false)
   const hasResult = toolCall.result !== undefined
 
@@ -118,12 +121,12 @@ function ToolCallCard({ toolCall }: { toolCall: ToolCallInfo }) {
       {open && (
         <div className="border-t border-border/30 px-3 py-2 space-y-2">
           <div>
-            <p className="text-[9px] font-semibold text-text-muted tracking-wide mb-1">ARGUMENTS</p>
+            <p className="text-[9px] font-semibold text-text-muted tracking-wide mb-1">{t('conv.arguments')}</p>
             <pre className="text-[10px] font-mono bg-surface rounded p-2 text-text-secondary overflow-x-auto max-h-32 overflow-y-auto">{toolCall.args}</pre>
           </div>
           {toolCall.result !== undefined && (
             <div>
-              <p className="text-[9px] font-semibold text-text-muted tracking-wide mb-1">RESULT</p>
+              <p className="text-[9px] font-semibold text-text-muted tracking-wide mb-1">{t('conv.result')}</p>
               <pre className={`text-[10px] font-mono bg-surface rounded p-2 overflow-x-auto max-h-32 overflow-y-auto ${toolCall.success ? 'text-text-secondary' : 'text-error'}`}>{toolCall.result}</pre>
             </div>
           )}
@@ -149,6 +152,7 @@ function RoleBadge({ role }: { role: 'user' | 'asst' | 'tool' }) {
 
 /** Conversation 对话栏页面 */
 export function Conversation() {
+  const { t } = useI18n()
   const [searchParams] = useSearchParams()
   const initialSessionId = searchParams.get('session')
   const [sessions, setSessions] = useState<SessionItem[]>([])
@@ -375,7 +379,7 @@ export function Conversation() {
     return (
       <div className="flex items-center justify-center h-full bg-surface">
         <div className="bg-card border border-error/30 rounded-lg px-6 py-4 max-w-md text-center">
-          <p className="text-sm font-semibold text-error mb-1">Failed to load sessions</p>
+          <p className="text-sm font-semibold text-error mb-1">{t('conv.loadFailed')}</p>
           <p className="text-xs text-text-muted">{loadError}</p>
         </div>
       </div>
@@ -387,13 +391,13 @@ export function Conversation() {
       {/* 左侧 Session 列表 */}
       <div className="w-60 bg-card border-r border-border flex flex-col shrink-0">
         <div className="flex items-center justify-between px-4 pt-4 pb-3">
-          <span className="text-sm font-semibold text-text">Sessions</span>
+          <span className="text-sm font-semibold text-text">{t('conv.sessions')}</span>
           <span className="text-xs text-text-muted">{sessions.length}</span>
         </div>
         <div className="px-3 pb-2">
           <div className="flex items-center gap-2 px-2.5 h-8 bg-surface rounded-lg border border-border">
             <Search size={14} className="text-text-muted shrink-0" />
-            <input type="text" placeholder="Filter sessions..." className="flex-1 bg-transparent text-xs outline-none placeholder:text-text-muted" />
+            <input type="text" placeholder={t('conv.filterSessions')} className="flex-1 bg-transparent text-xs outline-none placeholder:text-text-muted" />
           </div>
         </div>
         <div className="flex-1 overflow-y-auto">
@@ -411,7 +415,7 @@ export function Conversation() {
                   {s.label}
                 </div>
                 <div className="text-[10px] text-text-secondary">
-                  {s.turns} turns · {s.status === 'active' ? 'Active' : 'Archived'}
+                  {s.turns} {t('common.turns')} · {s.status === 'active' ? t('common.active') : t('common.archived')}
                 </div>
               </div>
             </button>
@@ -424,7 +428,7 @@ export function Conversation() {
         <div className="flex items-center justify-between h-13 px-5 border-b border-border shrink-0">
           <div className="flex items-center gap-2">
             <div className="w-2 h-2 rounded-full" style={{ backgroundColor: selectedSession?.color ?? '#9C9B99' }} />
-            <span className="text-[15px] font-semibold text-text">{selectedSession?.label ?? 'No session'}</span>
+            <span className="text-[15px] font-semibold text-text">{selectedSession?.label ?? t('conv.noSession')}</span>
             {selectedSession && (
               <span className="text-[10px] font-medium text-text-secondary bg-muted px-2 py-0.5 rounded-full">
                 {selectedSession.turns} turns
@@ -434,11 +438,11 @@ export function Conversation() {
           <div className="flex items-center gap-2">
             <div className="flex items-center gap-1 px-2.5 py-1 bg-surface rounded-md border border-border">
               <Zap size={12} className="text-[#D89575]" />
-              <span className="text-[11px] font-medium text-text-secondary">{config?.capabilities.skills.length ?? 0} Skills</span>
+              <span className="text-[11px] font-medium text-text-secondary">{config?.capabilities.skills.length ?? 0} {t('conv.skills')}</span>
             </div>
             <div className="flex items-center gap-1 px-2.5 py-1 bg-surface rounded-md border border-border">
               <Wrench size={12} className="text-text-secondary" />
-              <span className="text-[11px] font-medium text-text-secondary">{config?.capabilities.tools.length ?? 0} Tools</span>
+              <span className="text-[11px] font-medium text-text-secondary">{config?.capabilities.tools.length ?? 0} {t('conv.tools')}</span>
             </div>
           </div>
         </div>
@@ -446,7 +450,7 @@ export function Conversation() {
         <div className="flex-1 overflow-y-auto bg-surface px-6 py-5 space-y-4">
           {messages.length === 0 && !sending && (
             <div className="flex items-center justify-center h-full">
-              <p className="text-sm text-text-muted">No messages yet. Start a conversation below.</p>
+              <p className="text-sm text-text-muted">{t('conv.noMessages')}</p>
             </div>
           )}
           {messages.map((msg, i) => (
@@ -471,8 +475,8 @@ export function Conversation() {
                   )}
                   {msg.turnStats && (msg.turnStats.toolRoundCount > 0 || msg.turnStats.toolCallsExecuted > 0) && (
                     <div className="flex items-center gap-3 text-[10px] text-text-muted">
-                      <span>{msg.turnStats.toolRoundCount} tool round{msg.turnStats.toolRoundCount !== 1 ? 's' : ''}</span>
-                      <span>{msg.turnStats.toolCallsExecuted} tool call{msg.turnStats.toolCallsExecuted !== 1 ? 's' : ''}</span>
+                      <span>{msg.turnStats.toolRoundCount} {t('conv.toolRounds')}</span>
+                      <span>{msg.turnStats.toolCallsExecuted} {t('conv.toolCalls')}</span>
                     </div>
                   )}
                 </div>
@@ -490,7 +494,7 @@ export function Conversation() {
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) { e.preventDefault(); handleSend() } }}
-              placeholder="Send a message..."
+              placeholder={t('conv.sendPlaceholder')}
               className="flex-1 bg-transparent text-xs outline-none placeholder:text-text-muted"
             />
           </div>
@@ -511,7 +515,7 @@ export function Conversation() {
       {/* 右侧上下文面板——从 API detail 读取真实数据 */}
       <div className="w-75 bg-card border-l border-border flex flex-col shrink-0">
         <div className="flex items-center h-13 px-4 border-b border-border">
-          <span className="text-sm font-semibold text-text">Context</span>
+          <span className="text-sm font-semibold text-text">{t('conv.context')}</span>
         </div>
 
         <div className="flex px-4 border-b border-border">
@@ -532,7 +536,7 @@ export function Conversation() {
           {activeTab === 'l3' && (
             <>
               <p className="text-[10px] font-semibold text-text-muted tracking-wide">
-                L3 HISTORY ({detail?.records.length ?? messages.length} RECORDS)
+                {t('conv.l3History')} ({detail?.records.length ?? messages.length} {t('conv.records')})
               </p>
               {(detail?.records.length ?? 0) > 0 ? (
                 <div className="bg-card rounded-lg p-3 shadow-sm border border-border/30 space-y-2 max-h-80 overflow-y-auto">
@@ -557,7 +561,7 @@ export function Conversation() {
                   ))}
                 </div>
               ) : (
-                <p className="text-[11px] text-text-muted italic">No records yet</p>
+                <p className="text-[11px] text-text-muted italic">{t('conv.noRecords')}</p>
               )}
             </>
           )}
@@ -565,7 +569,7 @@ export function Conversation() {
           {activeTab === 'l2' && (
             <>
               <div className="flex items-center justify-between">
-                <p className="text-[10px] font-semibold text-text-muted tracking-wide">L2 MEMORY</p>
+                <p className="text-[10px] font-semibold text-text-muted tracking-wide">{t('conv.l2Memory')}</p>
                 <button
                   onClick={async () => {
                     if (!selectedSession || consolidating) return
@@ -587,51 +591,51 @@ export function Conversation() {
                     : <Zap size={10} className="text-primary" />
                   }
                   <span className="text-[10px] font-medium text-primary">
-                    {consolidating ? 'Generating...' : detail?.l2 ? 'Regenerate' : 'Generate L2'}
+                    {consolidating ? t('conv.generating') : detail?.l2 ? t('conv.regenerate') : t('conv.generateL2')}
                   </span>
                 </button>
               </div>
               {detail?.l2 ? (
                 <div className="bg-card rounded-lg p-3 shadow-sm border border-border/30 mt-2">
                   <div className="flex items-center gap-1 mb-2">
-                    <span className="text-[10px] font-medium text-success bg-[#E8F5E9] px-1.5 py-0.5 rounded">consolidated</span>
+                    <span className="text-[10px] font-medium text-success bg-[#E8F5E9] px-1.5 py-0.5 rounded">{t('conv.consolidated')}</span>
                   </div>
                   <p className="text-[11px] text-text-secondary leading-relaxed">{detail.l2}</p>
                 </div>
               ) : (
-                <p className="text-[11px] text-text-muted italic mt-2">No L2 memory yet. Click Generate to create from conversation history.</p>
+                <p className="text-[11px] text-text-muted italic mt-2">{t('conv.noL2')}</p>
               )}
             </>
           )}
 
           {activeTab === 'insights' && (
             <>
-              <p className="text-[10px] font-semibold text-text-muted tracking-wide">INSIGHTS / SCOPE</p>
+              <p className="text-[10px] font-semibold text-text-muted tracking-wide">{t('conv.insightsScope')}</p>
               {detail?.scope ? (
                 <div className="bg-card rounded-lg p-3 shadow-sm border border-border/30">
                   <div className="flex items-center gap-1 mb-1.5">
                     <ArrowDownRight size={10} className="text-primary" />
-                    <span className="text-[10px] font-medium text-primary">from Main</span>
+                    <span className="text-[10px] font-medium text-primary">{t('conv.fromMain')}</span>
                   </div>
                   <p className="text-[11px] text-text-secondary leading-relaxed">{detail.scope}</p>
                 </div>
               ) : (
-                <p className="text-[11px] text-text-muted italic">No insights received</p>
+                <p className="text-[11px] text-text-muted italic">{t('conv.noInsights')}</p>
               )}
             </>
           )}
 
           {activeTab === 'prompt' && (
             <>
-              <p className="text-[10px] font-semibold text-text-muted tracking-wide">SESSION INFO</p>
+              <p className="text-[10px] font-semibold text-text-muted tracking-wide">{t('conv.sessionInfo')}</p>
               {detail?.meta ? (
                 <div className="bg-card rounded-lg p-3 shadow-sm border border-border/30 space-y-1.5">
                   {[
-                    { label: 'ID', value: detail.meta.id },
-                    { label: 'Label', value: detail.meta.label },
-                    { label: 'Status', value: detail.meta.status },
+                    { label: t('conv.id'), value: detail.meta.id },
+                    { label: t('conv.label'), value: detail.meta.label },
+                    { label: t('conv.status'), value: detail.meta.status },
                     { label: 'Turns', value: String(detail.meta.turnCount) },
-                    { label: 'Created', value: new Date(detail.meta.createdAt).toLocaleString() },
+                    { label: t('conv.created'), value: new Date(detail.meta.createdAt).toLocaleString() },
                   ].map(({ label, value }) => (
                     <div key={label} className="flex justify-between">
                       <span className="text-[11px] font-medium text-text-muted">{label}</span>
@@ -640,7 +644,7 @@ export function Conversation() {
                   ))}
                 </div>
               ) : (
-                <p className="text-[11px] text-text-muted italic">Select a session to view info</p>
+                <p className="text-[11px] text-text-muted italic">{t('conv.selectSession')}</p>
               )}
             </>
           )}

@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { ChevronDown, ChevronRight, Pencil, ArrowDownRight, Loader2, Search, Filter, Save } from 'lucide-react'
 import { fetchSessions, fetchSessionDetail, fetchSystemPrompt, updateSystemPrompt, fetchScope, updateScope, injectRecord, triggerIntegration, type SessionMeta, type SessionDetail } from '@/lib/api'
+import { useI18n } from '@/lib/i18n'
 
 /** 角色 badge */
 function RoleBadge({ role }: { role: string }) {
@@ -124,6 +125,7 @@ export function Inspector() {
   const [injectRole, setInjectRole] = useState<'user' | 'assistant'>('user')
   const [injectContent, setInjectContent] = useState('')
   const [injecting, setInjecting] = useState(false)
+  const { t } = useI18n()
 
   /* 拉取 session 列表 */
   useEffect(() => {
@@ -161,7 +163,7 @@ export function Inspector() {
       {/* Header */}
       <div className="flex items-center justify-between h-13 px-6 border-b border-border shrink-0">
         <div className="flex items-center gap-3">
-          <h2 className="text-[15px] font-semibold text-text">Inspector</h2>
+          <h2 className="text-[15px] font-semibold text-text">{t('insp.title')}</h2>
           {/* Session 选择器 */}
           <div className="relative">
             <button
@@ -190,7 +192,7 @@ export function Inspector() {
         </div>
         <div className="flex items-center gap-1 px-3 py-1.5 bg-primary-light rounded-lg cursor-pointer hover:bg-primary-light/80 transition-colors">
           <Pencil size={12} className="text-primary" />
-          <span className="text-[11px] font-medium text-primary">Edit Mode</span>
+          <span className="text-[11px] font-medium text-primary">{t('insp.editMode')}</span>
         </div>
       </div>
 
@@ -206,7 +208,7 @@ export function Inspector() {
             <div className="space-y-5">
               {/* L3 Records */}
               <DataCard
-                title="L3 — Conversation Records"
+                title={t('insp.l3Title')}
                 badge={detail ? `${detail.records.length} records` : '—'}
               >
                 {/* 操作按钮 */}
@@ -215,7 +217,7 @@ export function Inspector() {
                     onClick={() => setInjectOpen(!injectOpen)}
                     className="flex items-center gap-1 px-2 py-1 text-[10px] font-medium bg-primary/10 hover:bg-primary/20 rounded transition-colors text-primary"
                   >
-                    + Inject Record
+                    {t('insp.injectRecord')}
                   </button>
                   <button
                     onClick={async () => {
@@ -233,7 +235,7 @@ export function Inspector() {
                     className="flex items-center gap-1 px-2 py-1 text-[10px] font-medium bg-[#EDE7F6] hover:bg-[#E0D6F2] rounded transition-colors text-purple disabled:opacity-50"
                   >
                     {integrating ? <Loader2 size={10} className="animate-spin" /> : <ArrowDownRight size={10} />}
-                    Integrate
+                    {t('insp.integrate')}
                   </button>
                 </div>
 
@@ -255,7 +257,7 @@ export function Inspector() {
                       value={injectContent}
                       onChange={(e) => setInjectContent(e.target.value)}
                       className="w-full h-16 px-2 py-1.5 text-[11px] bg-card border border-border rounded-lg focus:border-primary focus:outline-none resize-y"
-                      placeholder="Message content..."
+                      placeholder={t('insp.msgPlaceholder')}
                     />
                     <div className="flex items-center gap-2">
                       <button
@@ -274,9 +276,9 @@ export function Inspector() {
                         className="flex items-center gap-1 px-2 py-1 text-[10px] font-medium bg-primary text-white rounded hover:bg-primary-dark disabled:opacity-50 transition-colors"
                       >
                         {injecting ? <Loader2 size={10} className="animate-spin" /> : <Save size={10} />}
-                        Inject
+                        {t('insp.inject')}
                       </button>
-                      <button onClick={() => setInjectOpen(false)} className="px-2 py-1 text-[10px] text-text-muted hover:text-text transition-colors">Cancel</button>
+                      <button onClick={() => setInjectOpen(false)} className="px-2 py-1 text-[10px] text-text-muted hover:text-text transition-colors">{t('common.cancel')}</button>
                     </div>
                   </div>
                 )}
@@ -289,7 +291,7 @@ export function Inspector() {
                       type="text"
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
-                      placeholder="Search records..."
+                      placeholder={t('insp.searchRecords')}
                       className="flex-1 bg-transparent text-[11px] outline-none placeholder:text-text-muted"
                     />
                   </div>
@@ -326,13 +328,13 @@ export function Inspector() {
                       ))}
                       {filtered.length < (detail?.records.length ?? 0) && (
                         <p className="text-[10px] text-text-muted italic">
-                          Showing {filtered.length} of {detail?.records.length} records
+                          {t('insp.showing')} {filtered.length} {t('insp.of')} {detail?.records.length}
                         </p>
                       )}
                     </div>
                   ) : (
                     <p className="text-[11px] text-text-muted italic">
-                      {(detail?.records.length ?? 0) > 0 ? 'No matching records' : 'No records yet'}
+                      {(detail?.records.length ?? 0) > 0 ? t('insp.noMatching') : t('insp.noRecords')}
                     </p>
                   )
                 })()}
@@ -340,14 +342,14 @@ export function Inspector() {
 
               {/* L2 Memory */}
               <DataCard
-                title="L2 — Memory"
-                badge={detail?.l2 ? 'consolidated' : 'pending'}
+                title={t('insp.l2Title')}
+                badge={detail?.l2 ? t('insp.consolidated') : t('insp.pending')}
                 badgeColor={detail?.l2 ? 'green' : 'orange'}
               >
                 {detail?.l2 ? (
                   <p className="text-[11px] text-text-secondary leading-relaxed">{detail.l2}</p>
                 ) : (
-                  <p className="text-[11px] text-text-muted italic">No L2 memory consolidated yet</p>
+                  <p className="text-[11px] text-text-muted italic">{t('insp.noL2')}</p>
                 )}
               </DataCard>
             </div>
@@ -355,14 +357,14 @@ export function Inspector() {
             {/* 右列 */}
             <div className="space-y-5">
               {/* Insights / Scope */}
-              <DataCard title="Insights / Scope">
+              <DataCard title={t('insp.insightsTitle')}>
                 {scopeEditing ? (
                   <div className="space-y-2">
                     <textarea
                       value={scopeDraft}
                       onChange={(e) => setScopeDraft(e.target.value)}
                       className="w-full h-24 px-2 py-1.5 text-[11px] font-mono bg-surface border border-border rounded-lg focus:border-primary focus:outline-none resize-y leading-relaxed"
-                      placeholder="Insights content..."
+                      placeholder={t('insp.insightsPlaceholder')}
                     />
                     <div className="flex items-center gap-2">
                       <button
@@ -380,9 +382,9 @@ export function Inspector() {
                         className="flex items-center gap-1 px-2 py-1 text-[10px] font-medium bg-primary text-white rounded hover:bg-primary-dark disabled:opacity-50 transition-colors"
                       >
                         {scopeSaving ? <Loader2 size={10} className="animate-spin" /> : <Save size={10} />}
-                        Save
+                        {t('common.save')}
                       </button>
-                      <button onClick={() => setScopeEditing(false)} className="px-2 py-1 text-[10px] font-medium text-text-muted hover:text-text transition-colors">Cancel</button>
+                      <button onClick={() => setScopeEditing(false)} className="px-2 py-1 text-[10px] font-medium text-text-muted hover:text-text transition-colors">{t('common.cancel')}</button>
                     </div>
                   </div>
                 ) : (
@@ -391,12 +393,12 @@ export function Inspector() {
                       <>
                         <div className="flex items-center gap-1 mb-2">
                           <ArrowDownRight size={10} className="text-primary" />
-                          <span className="text-[10px] font-medium text-primary">from Main</span>
+                          <span className="text-[10px] font-medium text-primary">{t('insp.fromMain')}</span>
                         </div>
                         <p className="text-[11px] text-text-secondary leading-relaxed whitespace-pre-wrap">{scopeContent ?? detail?.scope}</p>
                       </>
                     ) : (
-                      <p className="text-[11px] text-text-muted italic">No insights received</p>
+                      <p className="text-[11px] text-text-muted italic">{t('insp.noInsights')}</p>
                     )}
                     {scopeConfigured && (
                       <button
@@ -411,7 +413,7 @@ export function Inspector() {
               </DataCard>
 
               {/* System Prompt */}
-              <DataCard title="System Prompt">
+              <DataCard title={t('insp.sysPromptTitle')}>
                 {sysPromptConfigured ? (
                   sysPromptEditing ? (
                     <div className="space-y-2">
@@ -436,13 +438,13 @@ export function Inspector() {
                           className="flex items-center gap-1 px-2 py-1 text-[10px] font-medium bg-primary text-white rounded hover:bg-primary-dark disabled:opacity-50 transition-colors"
                         >
                           {sysPromptSaving ? <Loader2 size={10} className="animate-spin" /> : <Save size={10} />}
-                          Save
+                          {t('common.save')}
                         </button>
                         <button
                           onClick={() => setSysPromptEditing(false)}
                           className="px-2 py-1 text-[10px] font-medium text-text-muted hover:text-text transition-colors"
                         >
-                          Cancel
+                          {t('common.cancel')}
                         </button>
                       </div>
                     </div>
@@ -462,13 +464,13 @@ export function Inspector() {
                   )
                 ) : (
                   <p className="text-[11px] text-text-muted italic">
-                    Pass sessionAccess to startDevtools() to enable
+                    {t('insp.sysPromptHint')}
                   </p>
                 )}
               </DataCard>
 
               {/* Session Meta */}
-              <DataCard title="Session Meta">
+              <DataCard title={t('insp.metaTitle')}>
                 {selectedNode ? (
                   <div className="bg-surface rounded-lg p-3 border border-border/30 overflow-x-auto">
                     <JsonTree data={{
@@ -483,7 +485,7 @@ export function Inspector() {
                     }} />
                   </div>
                 ) : (
-                  <p className="text-[11px] text-text-muted italic">Select a session</p>
+                  <p className="text-[11px] text-text-muted italic">{t('insp.selectSession')}</p>
                 )}
               </DataCard>
             </div>

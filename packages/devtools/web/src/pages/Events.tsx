@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { useI18n } from '@/lib/i18n'
 
 /** 事件类型 */
 type EventType = 'turn:start' | 'turn:end' | 'consolidate' | 'integrate' | 'fork' | 'error'
@@ -22,14 +23,14 @@ const eventStyles: Record<EventType, { bg: string; text: string; label: string }
   error: { bg: 'bg-[#FFEBEE]', text: 'text-error', label: 'error' },
 }
 
-/** 过滤器选项 */
-const filterOptions: Array<{ key: string; label: string; types: EventType[] }> = [
-  { key: 'all', label: 'All', types: [] },
-  { key: 'turn', label: 'Turn', types: ['turn:start', 'turn:end'] },
-  { key: 'consolidation', label: 'Consolidation', types: ['consolidate'] },
-  { key: 'integration', label: 'Integration', types: ['integrate'] },
-  { key: 'fork', label: 'Fork', types: ['fork'] },
-  { key: 'error', label: 'Error', types: ['error'] },
+/** 过滤器选项（labelKey 在渲染时通过 t() 翻译） */
+const filterOptions: Array<{ key: string; labelKey: string; types: EventType[] }> = [
+  { key: 'all', labelKey: 'events.all', types: [] },
+  { key: 'turn', labelKey: 'events.turn', types: ['turn:start', 'turn:end'] },
+  { key: 'consolidation', labelKey: 'events.consolidation', types: ['consolidate'] },
+  { key: 'integration', labelKey: 'events.integration', types: ['integrate'] },
+  { key: 'fork', labelKey: 'events.fork', types: ['fork'] },
+  { key: 'error', labelKey: 'events.error', types: ['error'] },
 ]
 
 /* 无 mock 数据——全部从 WS 实时接收 */
@@ -62,6 +63,7 @@ function formatTime(date: Date): string {
 
 /** Events 事件流页面 */
 export function Events() {
+  const { t } = useI18n()
   const [activeFilter, setActiveFilter] = useState('all')
   const [events, setEvents] = useState<StelloEvent[]>([])
   const [wsConnected, setWsConnected] = useState(false)
@@ -143,11 +145,11 @@ export function Events() {
     <div className="flex flex-col h-full">
       {/* Header */}
       <div className="flex items-center justify-between h-13 px-6 border-b border-border shrink-0">
-        <h2 className="text-[15px] font-semibold text-text">Event Stream</h2>
+        <h2 className="text-[15px] font-semibold text-text">{t('events.title')}</h2>
         <div className="flex items-center gap-1.5">
           <div className={`w-2 h-2 rounded-full ${wsConnected ? 'bg-success animate-pulse shadow-[0_0_6px_rgba(77,155,106,0.6)]' : 'bg-text-muted'}`} />
           <span className={`text-xs font-medium ${wsConnected ? 'text-success' : 'text-text-muted'}`}>
-            {wsConnected ? 'Live' : 'Offline'}
+            {wsConnected ? t('events.live') : t('events.offline')}
           </span>
         </div>
       </div>
@@ -166,7 +168,7 @@ export function Events() {
                   : 'bg-surface text-text-secondary border border-border hover:bg-muted'
             }`}
           >
-            {opt.label}
+            {t(opt.labelKey)}
           </button>
         ))}
       </div>

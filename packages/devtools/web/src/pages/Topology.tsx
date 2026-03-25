@@ -2,6 +2,7 @@ import { useRef, useEffect, useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { GitBranch, Archive, MessageSquare, Search, X, Play, Eye, Loader2 } from 'lucide-react'
 import { fetchSessionTree, fetchSessionDetail, forkSession, archiveSession, type SessionTreeNode, type SessionDetail } from '@/lib/api'
+import { useI18n } from '@/lib/i18n'
 
 /** 拓扑节点（前端渲染用，合并 meta + topology） */
 interface TopoNode {
@@ -289,6 +290,7 @@ export function Topology() {
   const [ctxMenu, setCtxMenu] = useState<ContextMenuState>({ visible: false, x: 0, y: 0, nodeId: null, nodeLabel: '' })
   const [actionLoading, setActionLoading] = useState(false)
   const navigate = useNavigate()
+  const { t } = useI18n()
 
   /* Camera ref（不触发 re-render，rAF 循环直接读取） */
   const cameraRef = useRef<Camera>({ x: 0, y: 0, zoom: 1, vx: 0, vy: 0 })
@@ -627,11 +629,11 @@ export function Topology() {
 
         {/* 顶部标题栏 */}
         <div className="absolute top-5 left-6 flex items-center gap-3">
-          <span className="text-base font-semibold text-[#E5E4E1]">Session Topology</span>
+          <span className="text-base font-semibold text-[#E5E4E1]">{t('topo.title')}</span>
           {topoNodes.length > 0 && (
             <div className="flex items-center gap-1 bg-primary/15 rounded-full px-2.5 py-0.5">
               <div className="w-1.5 h-1.5 rounded-full bg-primary" />
-              <span className="text-[11px] font-medium text-primary">{topoNodes.length} sessions</span>
+              <span className="text-[11px] font-medium text-primary">{topoNodes.length} {t('topo.sessions')}</span>
             </div>
           )}
         </div>
@@ -640,33 +642,33 @@ export function Topology() {
         {dataError && (
           <div className="absolute inset-0 flex items-center justify-center">
             <div className="bg-[#2A2520]/90 border border-error/30 rounded-lg px-6 py-4 max-w-md text-center">
-              <p className="text-sm font-semibold text-error mb-1">Failed to load sessions</p>
+              <p className="text-sm font-semibold text-error mb-1">{t('topo.loadFailed')}</p>
               <p className="text-xs text-[#9C9B99]">{dataError}</p>
             </div>
           </div>
         )}
         {!dataError && topoNodes.length === 0 && (
           <div className="absolute inset-0 flex items-center justify-center">
-            <p className="text-sm text-[#9C9B99]">Loading sessions...</p>
+            <p className="text-sm text-[#9C9B99]">{t('topo.loadingHint')}</p>
           </div>
         )}
 
         {/* 图例 */}
         <div className="absolute bottom-5 left-6 flex items-center gap-4">
           {[
-            { color: '#C4A882', label: 'Main Session' },
-            { color: '#B8956A', label: 'Active' },
-            { color: '#A8C4A0', label: 'Leaf' },
-            { color: '#D89575', label: 'Archived' },
-          ].map(({ color, label }) => (
-            <div key={label} className="flex items-center gap-1.5">
+            { color: '#C4A882', labelKey: 'topo.legend.main' },
+            { color: '#B8956A', labelKey: 'topo.legend.active' },
+            { color: '#A8C4A0', labelKey: 'topo.legend.leaf' },
+            { color: '#D89575', labelKey: 'topo.legend.archived' },
+          ].map(({ color, labelKey }) => (
+            <div key={labelKey} className="flex items-center gap-1.5">
               <div className="w-2 h-2 rounded-full" style={{ backgroundColor: color }} />
-              <span className="text-[10px] font-medium text-[#9C9B99]">{label}</span>
+              <span className="text-[10px] font-medium text-[#9C9B99]">{t(labelKey)}</span>
             </div>
           ))}
           <div className="flex items-center gap-1.5">
             <div className="w-4 h-0 border-t border-dashed border-[#D89575]" />
-            <span className="text-[10px] font-medium text-[#9C9B99]">Cross-ref</span>
+            <span className="text-[10px] font-medium text-[#9C9B99]">{t('topo.legend.crossRef')}</span>
           </div>
         </div>
 
@@ -699,14 +701,14 @@ export function Topology() {
                 className="flex items-center gap-2 w-full px-3 py-2 hover:bg-[#FFFFFF15] transition-colors text-left"
               >
                 <Play size={12} className="text-primary" />
-                <span className="text-xs font-medium text-[#E5E4E1]">Enter Session</span>
+                <span className="text-xs font-medium text-[#E5E4E1]">{t('topo.ctx.enter')}</span>
               </button>
               <button
                 onClick={() => { navigate(`/inspector?session=${ctxMenu.nodeId}`); closeCtxMenu() }}
                 className="flex items-center gap-2 w-full px-3 py-2 hover:bg-[#FFFFFF15] transition-colors text-left"
               >
                 <Eye size={12} className="text-primary" />
-                <span className="text-xs font-medium text-[#E5E4E1]">View in Inspector</span>
+                <span className="text-xs font-medium text-[#E5E4E1]">{t('topo.ctx.inspect')}</span>
               </button>
               <div className="h-px bg-[#3D3530] mx-2" />
               <button
@@ -715,7 +717,7 @@ export function Topology() {
                 className="flex items-center gap-2 w-full px-3 py-2 hover:bg-[#FFFFFF15] transition-colors text-left disabled:opacity-50"
               >
                 {actionLoading ? <Loader2 size={12} className="text-primary animate-spin" /> : <GitBranch size={12} className="text-primary" />}
-                <span className="text-xs font-medium text-[#E5E4E1]">Fork</span>
+                <span className="text-xs font-medium text-[#E5E4E1]">{t('topo.ctx.fork')}</span>
               </button>
               <button
                 onClick={() => handleArchive(ctxMenu.nodeId!)}
@@ -723,7 +725,7 @@ export function Topology() {
                 className="flex items-center gap-2 w-full px-3 py-2 hover:bg-[#FFFFFF15] transition-colors text-left disabled:opacity-50"
               >
                 {actionLoading ? <Loader2 size={12} className="text-[#A8A7A5] animate-spin" /> : <Archive size={12} className="text-[#A8A7A5]" />}
-                <span className="text-xs font-medium text-[#A8A7A5]">Archive</span>
+                <span className="text-xs font-medium text-[#A8A7A5]">{t('topo.ctx.archive')}</span>
               </button>
             </div>
           </>
@@ -759,16 +761,16 @@ export function Topology() {
                 .map((cid) => nodesRef.current.find((n) => n.id === cid)?.label ?? cid.slice(0, 8))
               const childrenText = childLabels.length > 0 ? `${childLabels.length} (${childLabels.join(', ')})` : 'None'
               /* L2 从 detail 读 */
-              const l2Status = panelDetail?.l2 ? 'Consolidated' : panelDetail === null ? 'Loading...' : 'None'
+              const l2Status = panelDetail?.l2 ? t('topo.panel.consolidated') : panelDetail === null ? t('common.loading') : t('common.none')
               const l2Color = panelDetail?.l2 ? '#C4793D' : '#A8A7A5'
               /* turnCount 从 detail 读 */
               const turns = panelDetail?.meta?.turnCount ?? selectedNode.turns
 
               return [
-                { label: 'Status', value: selectedNode.status, color: selectedNode.status === 'active' ? '#C4793D' : '#A8A7A5' },
-                { label: 'Turns', value: String(turns), color: '#F0EDE8' },
-                { label: 'L2 Memory', value: l2Status, color: l2Color },
-                { label: 'Children', value: childrenText, color: '#F0EDE8' },
+                { label: t('topo.panel.status'), value: selectedNode.status === 'active' ? t('common.active') : t('common.archived'), color: selectedNode.status === 'active' ? '#C4793D' : '#A8A7A5' },
+                { label: t('topo.panel.turns'), value: String(turns), color: '#F0EDE8' },
+                { label: t('topo.panel.l2'), value: l2Status, color: l2Color },
+                { label: t('topo.panel.children'), value: childrenText, color: '#F0EDE8' },
               ]
             })().map(({ label, value, color }) => (
               <div key={label} className="flex items-center justify-between gap-3">
@@ -780,7 +782,7 @@ export function Topology() {
             {/* L2 内容预览（如果有） */}
             {panelDetail?.l2 && (
               <div className="bg-[#FFFFFF08] rounded-lg p-3 mt-1">
-                <p className="text-[10px] font-semibold text-[#A8A7A5] tracking-wide mb-1.5">L2 SUMMARY</p>
+                <p className="text-[10px] font-semibold text-[#A8A7A5] tracking-wide mb-1.5">{t('topo.panel.l2Summary')}</p>
                 <p className="text-[11px] text-[#D1CEC8] leading-relaxed">
                   {panelDetail.l2.length > 150 ? panelDetail.l2.slice(0, 150) + '...' : panelDetail.l2}
                 </p>
@@ -791,20 +793,20 @@ export function Topology() {
 
             {/* 跳转入口 */}
             <div className="space-y-1.5">
-              <p className="text-[10px] font-semibold text-[#A8A7A5] tracking-wide">OPEN IN</p>
+              <p className="text-[10px] font-semibold text-[#A8A7A5] tracking-wide">{t('topo.panel.openIn')}</p>
               <button
                 onClick={() => navigate(`/conversation?session=${selectedNode.id}`)}
                 className="flex items-center gap-2 w-full px-3 py-2 rounded-lg bg-[#FFFFFF08] hover:bg-[#FFFFFF15] transition-colors"
               >
                 <MessageSquare size={14} className="text-primary" />
-                <span className="text-xs font-medium text-[#F0EDE8]">Conversation</span>
+                <span className="text-xs font-medium text-[#F0EDE8]">{t('topo.panel.conversation')}</span>
               </button>
               <button
                 onClick={() => navigate(`/inspector?session=${selectedNode.id}`)}
                 className="flex items-center gap-2 w-full px-3 py-2 rounded-lg bg-[#FFFFFF08] hover:bg-[#FFFFFF15] transition-colors"
               >
                 <Search size={14} className="text-primary" />
-                <span className="text-xs font-medium text-[#F0EDE8]">Inspector</span>
+                <span className="text-xs font-medium text-[#F0EDE8]">{t('topo.panel.inspector')}</span>
               </button>
             </div>
 
@@ -818,7 +820,7 @@ export function Topology() {
                 className="flex items-center gap-1.5 px-3 py-2 bg-primary/20 rounded-lg hover:bg-primary/30 transition-colors disabled:opacity-50"
               >
                 {actionLoading ? <Loader2 size={13} className="text-primary animate-spin" /> : <GitBranch size={13} className="text-primary" />}
-                <span className="text-xs font-medium text-primary">Fork</span>
+                <span className="text-xs font-medium text-primary">{t('topo.ctx.fork')}</span>
               </button>
               <button
                 onClick={() => handleArchive(selectedNode.id)}
@@ -826,7 +828,7 @@ export function Topology() {
                 className="flex items-center gap-1.5 px-3 py-2 bg-[#FFFFFF10] rounded-lg hover:bg-[#FFFFFF20] transition-colors disabled:opacity-50"
               >
                 {actionLoading ? <Loader2 size={13} className="text-[#A8A7A5] animate-spin" /> : <Archive size={13} className="text-[#A8A7A5]" />}
-                <span className="text-xs font-medium text-[#A8A7A5]">Archive</span>
+                <span className="text-xs font-medium text-[#A8A7A5]">{t('topo.ctx.archive')}</span>
               </button>
             </div>
           </div>
