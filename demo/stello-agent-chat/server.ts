@@ -492,7 +492,7 @@ async function main() {
   const devtoolsPort = Number(process.env.DEVTOOLS_PORT ?? 4800)
   const dt = await startDevtools(app.agent, {
     port: devtoolsPort,
-    open: true,
+    open: false,
     llm: app.llm,
     prompts: app.prompts,
     sessionAccess: app.sessionAccess,
