@@ -161,7 +161,7 @@ export function Conversation() {
   const [detail, setDetail] = useState<SessionDetail | null>(null)
   const [activeTab, setActiveTab] = useState<'l3' | 'l2' | 'insights' | 'prompt'>('l3')
   const [inputValue, setInputValue] = useState('')
-  const [sending, setSending] = useState(false)
+  const [sendingSessions, setSendingSessions] = useState<Set<string>>(new Set())
   const [consolidating, setConsolidating] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [config, setConfig] = useState<AgentConfig | null>(null)
@@ -267,12 +267,13 @@ export function Conversation() {
   /** 发送消息——NDJSON 流式输出 */
   const handleSend = async () => {
     const text = inputValue.trim()
-    if (!text || sending || !selectedSession) return
+    if (!text || !selectedSession || sendingSessions.has(selectedSession.id)) return
 
+    const sendingSessionId = selectedSession.id
     const userMsg: ChatMessage = { id: String(nextIdRef.current++), role: 'user', content: text }
     setMessages((prev) => [...prev, userMsg])
     setInputValue('')
-    setSending(true)
+    setSendingSessions((prev) => new Set(prev).add(sendingSessionId))
 
     const botId = String(nextIdRef.current++)
     /* 先创建空的 streaming 占位 */
@@ -371,7 +372,7 @@ export function Conversation() {
         : m
       ))
     } finally {
-      setSending(false)
+      setSendingSessions((prev) => { const next = new Set(prev); next.delete(sendingSessionId); return next })
     }
   }
 
@@ -416,6 +417,7 @@ export function Conversation() {
                 </div>
                 <div className="text-[10px] text-text-secondary">
                   {s.turns} {t('common.turns')} · {s.status === 'active' ? t('common.active') : t('common.archived')}
+                  {sendingSessions.has(s.id) && <span className="ml-1 text-primary animate-pulse">●</span>}
                 </div>
               </div>
             </button>
@@ -448,7 +450,7 @@ export function Conversation() {
         </div>
 
         <div className="flex-1 overflow-y-auto bg-surface px-6 py-5 space-y-4">
-          {messages.length === 0 && !sending && (
+          {messages.length === 0 && !(selectedSession && sendingSessions.has(selectedSession.id)) && (
             <div className="flex items-center justify-center h-full">
               <p className="text-sm text-text-muted">{t('conv.noMessages')}</p>
             </div>
@@ -500,14 +502,14 @@ export function Conversation() {
           </div>
           <button
             onClick={handleSend}
-            disabled={!inputValue.trim() || sending}
+            disabled={!inputValue.trim() || !!(selectedSession && sendingSessions.has(selectedSession.id))}
             className={`w-9 h-9 rounded-lg flex items-center justify-center transition-all duration-200 ${
-              inputValue.trim() && !sending
+              inputValue.trim() && !(selectedSession && sendingSessions.has(selectedSession.id))
                 ? 'bg-primary hover:bg-primary/90 scale-100 shadow-md'
                 : 'bg-primary/40 scale-95'
             }`}
           >
-            {sending ? <Loader2 size={16} className="text-white animate-spin" /> : <ArrowUp size={16} className="text-white" />}
+            {selectedSession && sendingSessions.has(selectedSession.id) ? <Loader2 size={16} className="text-white animate-spin" /> : <ArrowUp size={16} className="text-white" />}
           </button>
         </div>
       </div>

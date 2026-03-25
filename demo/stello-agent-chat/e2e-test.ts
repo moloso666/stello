@@ -17,7 +17,7 @@ const API = `${BASE}/api`
 // ─── HTTP 工具 ───
 
 async function get<T>(path: string): Promise<T> {
-  const res = await fetch(`${API}${path}`)
+  const res = await fetch(`${API}${path}`, { signal: AbortSignal.timeout(30_000) })
   if (!res.ok) throw new Error(`GET ${path} → ${res.status}`)
   return res.json() as Promise<T>
 }
@@ -27,6 +27,7 @@ async function post<T>(path: string, body?: unknown): Promise<T> {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: body ? JSON.stringify(body) : undefined,
+    signal: AbortSignal.timeout(120_000),
   })
   if (!res.ok) {
     const text = await res.text().catch(() => '')
@@ -48,11 +49,14 @@ async function patch<T>(path: string, body: unknown): Promise<T> {
 /** 发送消息并等待流式响应完成，返回最终内容 */
 async function chat(sessionId: string, input: string): Promise<string> {
   await post(`/sessions/${sessionId}/enter`).catch(() => {})
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), 120_000)
   const res = await fetch(`${API}/sessions/${sessionId}/stream`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ input }),
-  })
+    signal: controller.signal,
+  }).finally(() => clearTimeout(timeout))
   if (!res.ok || !res.body) {
     const fallback = await post<{ turn: { finalContent: string } }>(`/sessions/${sessionId}/turn`, { input })
     return fallback.turn.finalContent
