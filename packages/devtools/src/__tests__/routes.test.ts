@@ -32,6 +32,7 @@ function createMockAgent() {
     leaveSession: vi.fn().mockResolvedValue({ sessionId: 'sess-1' }),
     forkSession: vi.fn().mockResolvedValue({ id: 'child-1', parentId: 'sess-1', label: 'fork', children: [], refs: [], depth: 2, index: 0 }),
     archiveSession: vi.fn().mockResolvedValue(undefined),
+    updateConfig: vi.fn(),
   }
 }
 
@@ -107,6 +108,50 @@ describe('devtools REST routes', () => {
     expect(body.orchestration.strategy).toBe('MainSessionFlatStrategy')
     expect(body.capabilities.tools).toHaveLength(1)
     expect(body.capabilities.skills).toHaveLength(1)
+  })
+
+  it('PATCH /config 调用 agent.updateConfig 并返回更新后的配置', async () => {
+    const agent = createMockAgent()
+    const app = new Hono()
+    app.route('/api', createRoutes(agent as never))
+
+    const res = await app.request('/api/config', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ runtime: { idleTtlMs: 5000 } }),
+    })
+    expect(res.status).toBe(200)
+    expect(agent.updateConfig).toHaveBeenCalledWith({ runtime: { idleTtlMs: 5000 } })
+    const body = await res.json() as { ok: boolean; config: { orchestration: { strategy: string } } }
+    expect(body.ok).toBe(true)
+    expect(body.config.orchestration.strategy).toBe('MainSessionFlatStrategy')
+  })
+
+  it('PATCH /config 校验非法输入返回 400', async () => {
+    const agent = createMockAgent()
+    const app = new Hono()
+    app.route('/api', createRoutes(agent as never))
+
+    const res = await app.request('/api/config', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ runtime: { idleTtlMs: -1 } }),
+    })
+    expect(res.status).toBe(400)
+    expect(agent.updateConfig).not.toHaveBeenCalled()
+  })
+
+  it('PATCH /config 校验非法 trigger 值', async () => {
+    const agent = createMockAgent()
+    const app = new Hono()
+    app.route('/api', createRoutes(agent as never))
+
+    const res = await app.request('/api/config', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ scheduling: { consolidation: { trigger: 'invalid' } } }),
+    })
+    expect(res.status).toBe(400)
   })
 
   it('GET /sessions/:id/detail 返回详细数据', async () => {

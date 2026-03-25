@@ -156,4 +156,20 @@ export function fetchConfig() {
   return request<AgentConfig>('/config')
 }
 
-/* PATCH /config 暂未开放——后续热更新时实现 */
+/** 可热更新的配置字段 */
+export interface HotConfigPatch {
+  runtime?: { idleTtlMs?: number }
+  scheduling?: {
+    consolidation?: { trigger?: string; everyNTurns?: number }
+    integration?: { trigger?: string; everyNTurns?: number }
+  }
+  splitGuard?: { minTurns?: number; cooldownTurns?: number }
+}
+
+/** 热更新 agent 配置 */
+export function patchConfig(patch: HotConfigPatch) {
+  return request<{ ok: boolean; config: AgentConfig }>('/config', {
+    method: 'PATCH',
+    body: JSON.stringify(patch),
+  })
+}

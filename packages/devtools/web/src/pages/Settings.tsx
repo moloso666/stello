@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import {
   GitBranch,
   Clock,
@@ -15,8 +15,11 @@ import {
   XCircle,
   ChevronDown,
   ChevronRight,
+  Save,
+  Download,
+  Upload,
 } from 'lucide-react'
-import { fetchConfig, type AgentConfig } from '@/lib/api'
+import { fetchConfig, patchConfig, type AgentConfig, type HotConfigPatch } from '@/lib/api'
 
 /** 配置卡片 */
 function Card({ title, icon: Icon, children }: { title: string; icon: React.ElementType; children: React.ReactNode }) {
@@ -45,11 +48,6 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
 /** 只读值显示 */
 function Value({ children }: { children: React.ReactNode }) {
   return <span className="text-xs font-medium text-text">{children}</span>
-}
-
-/** 代码风格值 */
-function CodeValue({ children }: { children: string }) {
-  return <code className="text-[11px] font-mono bg-surface px-2 py-0.5 rounded border border-border text-primary-dark">{children}</code>
 }
 
 /** 布尔状态指示器 */
@@ -107,11 +105,137 @@ function Collapsible({ title, count, defaultOpen, children }: { title: string; c
   )
 }
 
-/** Settings 配置页面（只读） */
+/** 可编辑数值输入 */
+function EditableNumber({
+  value,
+  onSave,
+  min = 0,
+  saving,
+}: {
+  value: number
+  onSave: (v: number) => void
+  min?: number
+  saving?: boolean
+}) {
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState(String(value))
+
+  const handleSave = () => {
+    const num = parseInt(draft, 10)
+    if (!isNaN(num) && num >= min) {
+      onSave(num)
+      setEditing(false)
+    }
+  }
+
+  if (!editing) {
+    return (
+      <button
+        onClick={() => { setDraft(String(value)); setEditing(true) }}
+        className="text-xs font-medium text-text hover:text-primary cursor-pointer border-b border-dashed border-text-muted/30 hover:border-primary transition-colors"
+      >
+        {value}
+      </button>
+    )
+  }
+
+  return (
+    <div className="flex items-center gap-1.5">
+      <input
+        type="number"
+        min={min}
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onKeyDown={(e) => e.key === 'Enter' && handleSave()}
+        className="w-20 h-6 px-2 text-xs font-mono bg-surface border border-border rounded focus:border-primary focus:outline-none"
+        autoFocus
+      />
+      <button
+        onClick={handleSave}
+        disabled={saving}
+        className="flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] font-medium bg-primary text-white rounded hover:bg-primary-dark disabled:opacity-50 transition-colors"
+      >
+        <Save size={10} />
+      </button>
+      <button
+        onClick={() => setEditing(false)}
+        className="px-1.5 py-0.5 text-[10px] font-medium text-text-muted hover:text-text transition-colors"
+      >
+        Cancel
+      </button>
+    </div>
+  )
+}
+
+/** 可编辑下拉选择 */
+function EditableSelect({
+  value,
+  options,
+  onSave,
+  saving,
+}: {
+  value: string
+  options: string[]
+  onSave: (v: string) => void
+  saving?: boolean
+}) {
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState(value)
+
+  const handleSave = () => {
+    onSave(draft)
+    setEditing(false)
+  }
+
+  if (!editing) {
+    return (
+      <button
+        onClick={() => { setDraft(value); setEditing(true) }}
+        className="text-[11px] font-mono bg-surface px-2 py-0.5 rounded border border-border text-primary-dark hover:border-primary cursor-pointer transition-colors"
+      >
+        {value}
+      </button>
+    )
+  }
+
+  return (
+    <div className="flex items-center gap-1.5">
+      <select
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        className="h-6 px-1.5 text-xs font-mono bg-surface border border-border rounded focus:border-primary focus:outline-none"
+        autoFocus
+      >
+        {options.map((opt) => (
+          <option key={opt} value={opt}>{opt}</option>
+        ))}
+      </select>
+      <button
+        onClick={handleSave}
+        disabled={saving}
+        className="flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] font-medium bg-primary text-white rounded hover:bg-primary-dark disabled:opacity-50 transition-colors"
+      >
+        <Save size={10} />
+      </button>
+      <button
+        onClick={() => setEditing(false)}
+        className="px-1.5 py-0.5 text-[10px] font-medium text-text-muted hover:text-text transition-colors"
+      >
+        Cancel
+      </button>
+    </div>
+  )
+}
+
+const CONSOLIDATION_TRIGGERS = ['manual', 'everyNTurns', 'onSwitch', 'onArchive', 'onLeave']
+const INTEGRATION_TRIGGERS = ['manual', 'afterConsolidate', 'everyNTurns', 'onSwitch', 'onArchive', 'onLeave']
+
+/** Settings 配置页面 */
 export function SettingsPage() {
   const [config, setConfig] = useState<AgentConfig | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
 
   useEffect(() => {
     fetchConfig()
@@ -119,6 +243,63 @@ export function SettingsPage() {
       .catch((e: Error) => setError(e.message))
       .finally(() => setLoading(false))
   }, [])
+
+  /** 通用 patch 并刷新 state */
+  const handlePatch = useCallback(async (patch: HotConfigPatch) => {
+    setSaving(true)
+    try {
+      const result = await patchConfig(patch)
+      setConfig(result.config)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setSaving(false)
+    }
+  }, [])
+
+  /** 导出配置 JSON */
+  const handleExport = useCallback(() => {
+    if (!config) return
+    const blob = new Blob([JSON.stringify(config, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `stello-config-${new Date().toISOString().slice(0, 10)}.json`
+    a.click()
+    URL.revokeObjectURL(url)
+  }, [config])
+
+  /** 导入配置 JSON */
+  const handleImport = useCallback(() => {
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.accept = '.json'
+    input.onchange = async () => {
+      const file = input.files?.[0]
+      if (!file) return
+      try {
+        const text = await file.text()
+        const json = JSON.parse(text) as Record<string, unknown>
+        const patch: HotConfigPatch = {}
+        if (json.runtime && typeof json.runtime === 'object') {
+          const rt = json.runtime as Record<string, unknown>
+          if (typeof rt.idleTtlMs === 'number') patch.runtime = { idleTtlMs: rt.idleTtlMs }
+        }
+        if (json.scheduling && typeof json.scheduling === 'object') {
+          patch.scheduling = json.scheduling as HotConfigPatch['scheduling']
+        }
+        if (json.splitGuard && typeof json.splitGuard === 'object') {
+          patch.splitGuard = json.splitGuard as HotConfigPatch['splitGuard']
+        }
+        if (Object.keys(patch).length > 0) {
+          await handlePatch(patch)
+        }
+      } catch (e) {
+        setError(e instanceof Error ? e.message : 'Invalid JSON file')
+      }
+    }
+    input.click()
+  }, [handlePatch])
 
   if (loading) {
     return (
@@ -134,6 +315,11 @@ export function SettingsPage() {
         <div className="bg-card border border-error/30 rounded-lg px-6 py-4 max-w-md text-center">
           <p className="text-sm font-semibold text-error mb-1">Failed to load config</p>
           <p className="text-xs text-text-muted">{error}</p>
+          {config && (
+            <button onClick={() => setError(null)} className="mt-2 text-xs text-primary hover:underline">
+              Dismiss
+            </button>
+          )}
         </div>
       </div>
     )
@@ -144,7 +330,23 @@ export function SettingsPage() {
       {/* Header */}
       <div className="flex items-center justify-between h-13 px-6 border-b border-border shrink-0">
         <h2 className="text-[15px] font-semibold text-text">Agent Configuration</h2>
-        <Tag variant="default">Read-only</Tag>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleExport}
+            className="flex items-center gap-1 px-2 py-1 text-[11px] font-medium text-text-secondary hover:text-text bg-surface border border-border rounded hover:border-primary transition-colors"
+          >
+            <Download size={12} />
+            Export
+          </button>
+          <button
+            onClick={handleImport}
+            className="flex items-center gap-1 px-2 py-1 text-[11px] font-medium text-text-secondary hover:text-text bg-surface border border-border rounded hover:border-primary transition-colors"
+          >
+            <Upload size={12} />
+            Import
+          </button>
+          <Tag variant="green">Live</Tag>
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto bg-surface p-6 space-y-5">
@@ -153,7 +355,7 @@ export function SettingsPage() {
           <Row label="Strategy">
             <div className="flex items-center gap-2">
               <ImmutableBadge />
-              <CodeValue>{config.orchestration.strategy}</CodeValue>
+              <code className="text-[11px] font-mono bg-surface px-2 py-0.5 rounded border border-border text-primary-dark">{config.orchestration.strategy}</code>
             </div>
           </Row>
           <Row label="MainSession">
@@ -166,10 +368,11 @@ export function SettingsPage() {
 
         {/* Scheduling */}
         <Card title="Scheduling Policy" icon={Clock}>
-          <div className="flex items-center gap-2 mb-3">
-            <ImmutableBadge />
-            {!config.scheduling.hasScheduler && <Tag variant="default">No scheduler — manual only</Tag>}
-          </div>
+          {!config.scheduling.hasScheduler && (
+            <div className="flex items-center gap-2 mb-3">
+              <Tag variant="default">No scheduler — manual only</Tag>
+            </div>
+          )}
           <div className="bg-surface rounded-lg p-3 mb-3">
             <p className="text-[11px] text-text-secondary leading-relaxed">
               <span className="font-semibold text-text">Consolidation</span> (L3→L2) 将对话记录提炼为摘要。
@@ -177,35 +380,78 @@ export function SettingsPage() {
             </p>
           </div>
           <Row label="Consolidation Trigger">
-            <CodeValue>{config.scheduling.consolidation.trigger}</CodeValue>
+            {config.scheduling.hasScheduler ? (
+              <EditableSelect
+                value={config.scheduling.consolidation.trigger}
+                options={CONSOLIDATION_TRIGGERS}
+                onSave={(v) => handlePatch({ scheduling: { consolidation: { trigger: v } } })}
+                saving={saving}
+              />
+            ) : (
+              <code className="text-[11px] font-mono bg-surface px-2 py-0.5 rounded border border-border text-primary-dark">{config.scheduling.consolidation.trigger}</code>
+            )}
           </Row>
-          {config.scheduling.consolidation.everyNTurns && (
+          {(config.scheduling.consolidation.trigger === 'everyNTurns') && (
             <Row label="Consolidation Every N">
-              <Value>{config.scheduling.consolidation.everyNTurns} turns</Value>
+              {config.scheduling.hasScheduler ? (
+                <EditableNumber
+                  value={config.scheduling.consolidation.everyNTurns ?? 1}
+                  min={1}
+                  onSave={(v) => handlePatch({ scheduling: { consolidation: { everyNTurns: v } } })}
+                  saving={saving}
+                />
+              ) : (
+                <Value>{config.scheduling.consolidation.everyNTurns} turns</Value>
+              )}
             </Row>
           )}
           <Row label="Integration Trigger">
-            <CodeValue>{config.scheduling.integration.trigger}</CodeValue>
+            {config.scheduling.hasScheduler ? (
+              <EditableSelect
+                value={config.scheduling.integration.trigger}
+                options={INTEGRATION_TRIGGERS}
+                onSave={(v) => handlePatch({ scheduling: { integration: { trigger: v } } })}
+                saving={saving}
+              />
+            ) : (
+              <code className="text-[11px] font-mono bg-surface px-2 py-0.5 rounded border border-border text-primary-dark">{config.scheduling.integration.trigger}</code>
+            )}
           </Row>
-          {config.scheduling.integration.everyNTurns && (
+          {(config.scheduling.integration.trigger === 'everyNTurns') && (
             <Row label="Integration Every N">
-              <Value>{config.scheduling.integration.everyNTurns} turns</Value>
+              {config.scheduling.hasScheduler ? (
+                <EditableNumber
+                  value={config.scheduling.integration.everyNTurns ?? 1}
+                  min={1}
+                  onSave={(v) => handlePatch({ scheduling: { integration: { everyNTurns: v } } })}
+                  saving={saving}
+                />
+              ) : (
+                <Value>{config.scheduling.integration.everyNTurns} turns</Value>
+              )}
             </Row>
           )}
         </Card>
 
         {/* Split Guard */}
         <Card title="Split Guard" icon={Shield}>
-          <div className="flex items-center gap-2 mb-3">
-            <ImmutableBadge />
-          </div>
           {config.splitGuard ? (
             <>
               <Row label="Min Turns Before Split">
-                <Value>{config.splitGuard.minTurns}</Value>
+                <EditableNumber
+                  value={config.splitGuard.minTurns}
+                  min={0}
+                  onSave={(v) => handlePatch({ splitGuard: { minTurns: v } })}
+                  saving={saving}
+                />
               </Row>
               <Row label="Cooldown Turns">
-                <Value>{config.splitGuard.cooldownTurns}</Value>
+                <EditableNumber
+                  value={config.splitGuard.cooldownTurns}
+                  min={0}
+                  onSave={(v) => handlePatch({ splitGuard: { cooldownTurns: v } })}
+                  saving={saving}
+                />
               </Row>
             </>
           ) : (
@@ -215,11 +461,13 @@ export function SettingsPage() {
 
         {/* Runtime */}
         <Card title="Runtime" icon={Cpu}>
-          <Row label="Idle Recycle Delay">
-            <div className="flex items-center gap-2">
-              <Value>{config.runtime.idleTtlMs === 0 ? 'Immediate' : `${config.runtime.idleTtlMs} ms`}</Value>
-              <Tag variant="green">Hot-updatable</Tag>
-            </div>
+          <Row label="Idle Recycle Delay (ms)">
+            <EditableNumber
+              value={config.runtime.idleTtlMs}
+              min={0}
+              onSave={(v) => handlePatch({ runtime: { idleTtlMs: v } })}
+              saving={saving}
+            />
           </Row>
           <Row label="Runtime Resolver">
             <StatusDot configured={config.runtime.hasResolver} label={config.runtime.hasResolver ? 'Custom' : 'Auto (from sessionResolver)'} />

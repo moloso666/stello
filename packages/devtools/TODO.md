@@ -5,29 +5,9 @@
 
 ---
 
-## Phase 1：配置热更新
+## ~~Phase 1：配置热更新~~ ✅
 
-### 1.1 idleTtlMs 真正热更新
-- 唯一可动态修改的字段，做通整条链路
-- 后端：恢复 PATCH /config 端点，实际写入 `RuntimeManager.recyclePolicy.idleTtlMs`
-- 前端：Settings 页面 idleTtlMs 行加编辑控件 + Save 按钮
-- 需要 `DefaultEngineRuntimeManager` 暴露 `setRecyclePolicy()` 或直接修改引用
-
-### 1.2 Scheduler 参数热更新
-- 给 `Scheduler` 加 `updateConfig(config: SchedulerConfig)` 方法
-- 开放 4 个字段：consolidation.trigger / consolidation.everyNTurns / integration.trigger / integration.everyNTurns
-- 前端对应行改为可编辑 Select/NumberInput
-- 修改后调 PATCH /config 写入
-
-### 1.3 SplitGuard 参数热更新
-- 给 `SplitGuard` 加 `updateConfig({ minTurns, cooldownTurns })` 方法
-- 开放 2 个字段：minTurns / cooldownTurns
-- 前端对应行改为可编辑 NumberInput
-
-### 1.4 配置导入 / 导出
-- 导出：GET /config 的 JSON 快照下载为文件
-- 导入：上传 JSON → 合并到当前 agent（仅值类型字段，函数类配置忽略）
-- 前端 Settings header 加 Export / Import 按钮
+> 已完成：core 三组件 updateConfig + StelloAgent.updateConfig 门面 + PATCH /config + 前端可编辑 + 导入导出
 
 ---
 
@@ -101,3 +81,4 @@
 - [x] Scheduler.getConfig() / SplitGuard.getConfig() 序列化方法
 - [x] 清理 debug log / 无用 import / 空壳 PATCH
 - [x] docs/stello-agent-config-reference.md 配置完全参考文档
+- [x] Phase 1 配置热更新（idleTtlMs / Scheduler / SplitGuard + PATCH /config + 前端编辑 + 导入导出）

@@ -1,5 +1,5 @@
 import { Hono } from 'hono'
-import type { StelloAgent } from '@stello-ai/core'
+import type { StelloAgent, StelloAgentHotConfig } from '@stello-ai/core'
 
 /** 全局错误处理 */
 function withErrorHandler(app: Hono): void {
@@ -8,6 +8,64 @@ function withErrorHandler(app: Hono): void {
     console.error('[devtools]', c.req.method, c.req.path, message)
     return c.json({ error: message }, 500)
   })
+}
+
+/** 合法的 consolidation trigger 值 */
+const CONSOLIDATION_TRIGGERS = new Set(['manual', 'everyNTurns', 'onSwitch', 'onArchive', 'onLeave'])
+
+/** 合法的 integration trigger 值 */
+const INTEGRATION_TRIGGERS = new Set(['manual', 'afterConsolidate', 'everyNTurns', 'onSwitch', 'onArchive', 'onLeave'])
+
+/** 序列化 agent 配置为 JSON 快照 */
+function serializeConfig(agent: StelloAgent) {
+  const config = agent.config
+  const schedulerConfig = config.orchestration?.scheduler?.getConfig?.()
+  const splitGuardConfig = config.orchestration?.splitGuard?.getConfig?.()
+
+  const hooksProvider = config.orchestration?.hooks
+  let hookKeys: string[] = []
+  if (typeof hooksProvider === 'function') {
+    hookKeys = ['(per-session factory)']
+  } else if (hooksProvider) {
+    hookKeys = Object.keys(hooksProvider)
+  }
+
+  return {
+    orchestration: {
+      strategy: config.orchestration?.strategy?.constructor?.name ?? 'MainSessionFlatStrategy',
+      hasMainSession: !!config.orchestration?.mainSession,
+      hasTurnRunner: !!config.orchestration?.turnRunner,
+    },
+    runtime: {
+      idleTtlMs: config.runtime?.recyclePolicy?.idleTtlMs ?? 0,
+      hasResolver: !!config.runtime?.resolver,
+    },
+    scheduling: {
+      consolidation: schedulerConfig?.consolidation ?? { trigger: 'manual' },
+      integration: schedulerConfig?.integration ?? { trigger: 'manual' },
+      hasScheduler: !!config.orchestration?.scheduler,
+    },
+    splitGuard: splitGuardConfig ?? null,
+    session: {
+      hasSessionResolver: !!config.session?.sessionResolver,
+      hasMainSessionResolver: !!config.session?.mainSessionResolver,
+      hasConsolidateFn: !!config.session?.consolidateFn,
+      hasIntegrateFn: !!config.session?.integrateFn,
+      hasSerializeSendResult: !!config.session?.serializeSendResult,
+      hasToolCallParser: !!config.session?.toolCallParser,
+      options: config.session?.options ?? null,
+    },
+    capabilities: {
+      tools: config.capabilities.tools.getToolDefinitions(),
+      skills: config.capabilities.skills.getAll().map((s) => ({
+        name: s.name,
+        description: s.description,
+      })),
+      hasLifecycle: !!config.capabilities.lifecycle,
+      hasConfirm: !!config.capabilities.confirm,
+    },
+    hooks: hookKeys,
+  }
 }
 
 /** 创建 DevTools REST 路由 */
@@ -154,58 +212,58 @@ export function createRoutes(
 
   /** 获取 agent 配置（完整只读序列化） */
   app.get('/config', (c) => {
-    const config = agent.config
-    const schedulerConfig = config.orchestration?.scheduler?.getConfig?.()
-    const splitGuardConfig = config.orchestration?.splitGuard?.getConfig?.()
-
-    /* 解析 hooks 的已注册 key 列表 */
-    const hooksProvider = config.orchestration?.hooks
-    let hookKeys: string[] = []
-    if (typeof hooksProvider === 'function') {
-      hookKeys = ['(per-session factory)']
-    } else if (hooksProvider) {
-      hookKeys = Object.keys(hooksProvider)
-    }
-
-    return c.json({
-      orchestration: {
-        strategy: config.orchestration?.strategy?.constructor?.name ?? 'MainSessionFlatStrategy',
-        hasMainSession: !!config.orchestration?.mainSession,
-        hasTurnRunner: !!config.orchestration?.turnRunner,
-      },
-      runtime: {
-        idleTtlMs: config.runtime?.recyclePolicy?.idleTtlMs ?? 0,
-        hasResolver: !!config.runtime?.resolver,
-      },
-      scheduling: {
-        consolidation: schedulerConfig?.consolidation ?? { trigger: 'manual' },
-        integration: schedulerConfig?.integration ?? { trigger: 'manual' },
-        hasScheduler: !!config.orchestration?.scheduler,
-      },
-      splitGuard: splitGuardConfig ?? null,
-      session: {
-        hasSessionResolver: !!config.session?.sessionResolver,
-        hasMainSessionResolver: !!config.session?.mainSessionResolver,
-        hasConsolidateFn: !!config.session?.consolidateFn,
-        hasIntegrateFn: !!config.session?.integrateFn,
-        hasSerializeSendResult: !!config.session?.serializeSendResult,
-        hasToolCallParser: !!config.session?.toolCallParser,
-        options: config.session?.options ?? null,
-      },
-      capabilities: {
-        tools: config.capabilities.tools.getToolDefinitions(),
-        skills: config.capabilities.skills.getAll().map((s) => ({
-          name: s.name,
-          description: s.description,
-        })),
-        hasLifecycle: !!config.capabilities.lifecycle,
-        hasConfirm: !!config.capabilities.confirm,
-      },
-      hooks: hookKeys,
-    })
+    return c.json(serializeConfig(agent))
   })
 
-  /* PATCH /config 暂不开放——当前配置为只读；后续热更新时再实现 */
+  /** 热更新 agent 配置（仅值类型字段） */
+  app.patch('/config', async (c) => {
+    const body = await c.req.json<{
+      runtime?: { idleTtlMs?: number }
+      scheduling?: {
+        consolidation?: { trigger?: string; everyNTurns?: number }
+        integration?: { trigger?: string; everyNTurns?: number }
+      }
+      splitGuard?: { minTurns?: number; cooldownTurns?: number }
+    }>()
+
+    /* 输入校验 */
+    const errors: string[] = []
+    if (body.runtime?.idleTtlMs !== undefined && (typeof body.runtime.idleTtlMs !== 'number' || body.runtime.idleTtlMs < 0)) {
+      errors.push('runtime.idleTtlMs must be a non-negative number')
+    }
+    if (body.scheduling?.consolidation?.trigger && !CONSOLIDATION_TRIGGERS.has(body.scheduling.consolidation.trigger)) {
+      errors.push(`scheduling.consolidation.trigger must be one of: ${[...CONSOLIDATION_TRIGGERS].join(', ')}`)
+    }
+    if (body.scheduling?.integration?.trigger && !INTEGRATION_TRIGGERS.has(body.scheduling.integration.trigger)) {
+      errors.push(`scheduling.integration.trigger must be one of: ${[...INTEGRATION_TRIGGERS].join(', ')}`)
+    }
+    if (body.scheduling?.consolidation?.everyNTurns !== undefined && (typeof body.scheduling.consolidation.everyNTurns !== 'number' || body.scheduling.consolidation.everyNTurns < 1)) {
+      errors.push('scheduling.consolidation.everyNTurns must be a positive integer')
+    }
+    if (body.scheduling?.integration?.everyNTurns !== undefined && (typeof body.scheduling.integration.everyNTurns !== 'number' || body.scheduling.integration.everyNTurns < 1)) {
+      errors.push('scheduling.integration.everyNTurns must be a positive integer')
+    }
+    if (body.splitGuard?.minTurns !== undefined && (typeof body.splitGuard.minTurns !== 'number' || body.splitGuard.minTurns < 0)) {
+      errors.push('splitGuard.minTurns must be a non-negative number')
+    }
+    if (body.splitGuard?.cooldownTurns !== undefined && (typeof body.splitGuard.cooldownTurns !== 'number' || body.splitGuard.cooldownTurns < 0)) {
+      errors.push('splitGuard.cooldownTurns must be a non-negative number')
+    }
+    if (errors.length > 0) {
+      return c.json({ error: errors.join('; ') }, 400)
+    }
+
+    /* 构建热更新 patch */
+    const patch: StelloAgentHotConfig = {}
+    if (body.runtime) patch.runtime = body.runtime
+    if (body.scheduling) patch.scheduling = body.scheduling as StelloAgentHotConfig['scheduling']
+    if (body.splitGuard) patch.splitGuard = body.splitGuard
+
+    agent.updateConfig(patch)
+    onEvent?.({ type: 'config.updated', data: body as Record<string, unknown> })
+
+    return c.json({ ok: true, config: serializeConfig(agent) })
+  })
 
   /** 获取事件历史 */
   app.get('/events', (c) => {
