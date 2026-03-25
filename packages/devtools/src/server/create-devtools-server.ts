@@ -102,6 +102,9 @@ export async function startDevtools(
     options.llm,
     options.prompts,
     options.sessionAccess,
+    options.tools,
+    options.skills,
+    options.integration,
   )
   app.route('/api', api)
 

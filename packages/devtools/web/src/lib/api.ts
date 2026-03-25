@@ -229,3 +229,71 @@ export function updateSystemPrompt(sessionId: string, content: string) {
     body: JSON.stringify({ content }),
   })
 }
+
+/** 获取 session 的 scope */
+export function fetchScope(sessionId: string) {
+  return request<{ configured: boolean; content: string | null }>(`/sessions/${sessionId}/scope`)
+}
+
+/** 更新 session 的 scope */
+export function updateScope(sessionId: string, content: string) {
+  return request<{ ok: boolean }>(`/sessions/${sessionId}/scope`, {
+    method: 'PUT',
+    body: JSON.stringify({ content }),
+  })
+}
+
+/** 注入对话记录 */
+export function injectRecord(sessionId: string, role: string, content: string) {
+  return request<{ ok: boolean }>(`/sessions/${sessionId}/inject-record`, {
+    method: 'POST',
+    body: JSON.stringify({ role, content }),
+  })
+}
+
+/** Tool 信息（含启用状态） */
+export interface ToolWithStatus {
+  name: string
+  description: string
+  enabled: boolean
+}
+
+/** 获取 tools 列表 */
+export function fetchTools() {
+  return request<{ configured: boolean; tools: ToolWithStatus[] }>('/tools')
+}
+
+/** 切换 tool 启用/禁用 */
+export function toggleTool(name: string, enabled: boolean) {
+  return request<{ ok: boolean; tools: ToolWithStatus[] }>(`/tools/${encodeURIComponent(name)}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ enabled }),
+  })
+}
+
+/** Skill 信息（含启用状态） */
+export interface SkillWithStatus {
+  name: string
+  description: string
+  enabled: boolean
+}
+
+/** 获取 skills 列表 */
+export function fetchSkills() {
+  return request<{ configured: boolean; skills: SkillWithStatus[] }>('/skills')
+}
+
+/** 切换 skill 启用/禁用 */
+export function toggleSkill(name: string, enabled: boolean) {
+  return request<{ ok: boolean; skills: SkillWithStatus[] }>(`/skills/${encodeURIComponent(name)}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ enabled }),
+  })
+}
+
+/** 手动触发 integration */
+export function triggerIntegration() {
+  return request<{ ok: boolean; synthesis: string; insightCount: number }>('/integrate', {
+    method: 'POST',
+  })
+}

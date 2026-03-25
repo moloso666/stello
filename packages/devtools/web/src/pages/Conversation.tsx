@@ -39,6 +39,12 @@ interface ToolCallInfo {
   duration?: number
 }
 
+/** Turn 统计 */
+interface TurnStats {
+  toolRoundCount: number
+  toolCallsExecuted: number
+}
+
 /** 对话消息 */
 interface ChatMessage {
   id: string
@@ -46,6 +52,7 @@ interface ChatMessage {
   content: string
   streaming?: boolean
   toolCalls?: ToolCallInfo[]
+  turnStats?: TurnStats
 }
 
 /** 过滤 think 标签——提取 think 内容和正文 */
@@ -336,7 +343,11 @@ export function Conversation() {
                 const result = chunk['result'] as Record<string, unknown> | undefined
                 const turn = result?.['turn'] as Record<string, unknown> | undefined
                 const finalContent = turn?.['finalContent'] ?? turn?.['rawResponse'] ?? fullContent
-                setMessages((prev) => prev.map((m) => m.id === botId ? { ...m, content: String(finalContent), streaming: false, toolCalls: pendingToolCalls.length > 0 ? [...pendingToolCalls] : m.toolCalls } : m))
+                const turnStats: TurnStats | undefined = turn ? {
+                  toolRoundCount: (turn['toolRoundCount'] as number) ?? 0,
+                  toolCallsExecuted: (turn['toolCallsExecuted'] as number) ?? 0,
+                } : undefined
+                setMessages((prev) => prev.map((m) => m.id === botId ? { ...m, content: String(finalContent), streaming: false, toolCalls: pendingToolCalls.length > 0 ? [...pendingToolCalls] : m.toolCalls, turnStats } : m))
               }
             } catch { /* ignore parse error */ }
           }
@@ -456,6 +467,12 @@ export function Conversation() {
                       {msg.toolCalls.map((tc) => (
                         <ToolCallCard key={tc.id} toolCall={tc} />
                       ))}
+                    </div>
+                  )}
+                  {msg.turnStats && (msg.turnStats.toolRoundCount > 0 || msg.turnStats.toolCallsExecuted > 0) && (
+                    <div className="flex items-center gap-3 text-[10px] text-text-muted">
+                      <span>{msg.turnStats.toolRoundCount} tool round{msg.turnStats.toolRoundCount !== 1 ? 's' : ''}</span>
+                      <span>{msg.turnStats.toolCallsExecuted} tool call{msg.turnStats.toolCallsExecuted !== 1 ? 's' : ''}</span>
                     </div>
                   )}
                 </div>

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { ChevronDown, ChevronRight, Pencil, ArrowDownRight, Loader2, Search, Filter, Save } from 'lucide-react'
-import { fetchSessions, fetchSessionDetail, fetchSystemPrompt, updateSystemPrompt, type SessionMeta, type SessionDetail } from '@/lib/api'
+import { fetchSessions, fetchSessionDetail, fetchSystemPrompt, updateSystemPrompt, fetchScope, updateScope, injectRecord, triggerIntegration, type SessionMeta, type SessionDetail } from '@/lib/api'
 
 /** 角色 badge */
 function RoleBadge({ role }: { role: string }) {
@@ -114,6 +114,16 @@ export function Inspector() {
   const [sysPromptEditing, setSysPromptEditing] = useState(false)
   const [sysPromptDraft, setSysPromptDraft] = useState('')
   const [sysPromptSaving, setSysPromptSaving] = useState(false)
+  const [scopeContent, setScopeContent] = useState<string | null>(null)
+  const [scopeConfigured, setScopeConfigured] = useState(false)
+  const [scopeEditing, setScopeEditing] = useState(false)
+  const [scopeDraft, setScopeDraft] = useState('')
+  const [scopeSaving, setScopeSaving] = useState(false)
+  const [integrating, setIntegrating] = useState(false)
+  const [injectOpen, setInjectOpen] = useState(false)
+  const [injectRole, setInjectRole] = useState<'user' | 'assistant'>('user')
+  const [injectContent, setInjectContent] = useState('')
+  const [injecting, setInjecting] = useState(false)
 
   /* 拉取 session 列表 */
   useEffect(() => {
@@ -139,6 +149,9 @@ export function Inspector() {
     fetchSystemPrompt(selectedId)
       .then((r) => { setSysPromptConfigured(r.configured); setSysPrompt(r.content) })
       .catch(() => { setSysPromptConfigured(false); setSysPrompt(null) })
+    fetchScope(selectedId)
+      .then((r) => { setScopeConfigured(r.configured); setScopeContent(r.content) })
+      .catch(() => { setScopeConfigured(false); setScopeContent(null) })
   }, [selectedId])
 
   const selectedNode = sessions.find((s) => s.id === selectedId)
@@ -196,6 +209,78 @@ export function Inspector() {
                 title="L3 — Conversation Records"
                 badge={detail ? `${detail.records.length} records` : '—'}
               >
+                {/* 操作按钮 */}
+                <div className="flex items-center gap-2 mb-2">
+                  <button
+                    onClick={() => setInjectOpen(!injectOpen)}
+                    className="flex items-center gap-1 px-2 py-1 text-[10px] font-medium bg-primary/10 hover:bg-primary/20 rounded transition-colors text-primary"
+                  >
+                    + Inject Record
+                  </button>
+                  <button
+                    onClick={async () => {
+                      setIntegrating(true)
+                      try {
+                        await triggerIntegration()
+                        if (selectedId) {
+                          fetchSessionDetail(selectedId).then(setDetail).catch(() => {})
+                          fetchScope(selectedId).then((r) => setScopeContent(r.content)).catch(() => {})
+                        }
+                      } catch { /* ignore */ }
+                      setIntegrating(false)
+                    }}
+                    disabled={integrating}
+                    className="flex items-center gap-1 px-2 py-1 text-[10px] font-medium bg-[#EDE7F6] hover:bg-[#E0D6F2] rounded transition-colors text-purple disabled:opacity-50"
+                  >
+                    {integrating ? <Loader2 size={10} className="animate-spin" /> : <ArrowDownRight size={10} />}
+                    Integrate
+                  </button>
+                </div>
+
+                {/* 注入记录表单 */}
+                {injectOpen && (
+                  <div className="mb-3 p-3 bg-surface rounded-lg border border-border space-y-2">
+                    <div className="flex items-center gap-2">
+                      <select
+                        value={injectRole}
+                        onChange={(e) => setInjectRole(e.target.value as 'user' | 'assistant')}
+                        className="h-6 px-1.5 text-[11px] bg-card border border-border rounded focus:outline-none"
+                      >
+                        <option value="user">user</option>
+                        <option value="assistant">assistant</option>
+                      </select>
+                      <span className="text-[10px] text-text-muted">role</span>
+                    </div>
+                    <textarea
+                      value={injectContent}
+                      onChange={(e) => setInjectContent(e.target.value)}
+                      className="w-full h-16 px-2 py-1.5 text-[11px] bg-card border border-border rounded-lg focus:border-primary focus:outline-none resize-y"
+                      placeholder="Message content..."
+                    />
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={async () => {
+                          if (!selectedId || !injectContent.trim()) return
+                          setInjecting(true)
+                          try {
+                            await injectRecord(selectedId, injectRole, injectContent.trim())
+                            setInjectContent('')
+                            setInjectOpen(false)
+                            fetchSessionDetail(selectedId).then(setDetail).catch(() => {})
+                          } catch { /* ignore */ }
+                          setInjecting(false)
+                        }}
+                        disabled={injecting || !injectContent.trim()}
+                        className="flex items-center gap-1 px-2 py-1 text-[10px] font-medium bg-primary text-white rounded hover:bg-primary-dark disabled:opacity-50 transition-colors"
+                      >
+                        {injecting ? <Loader2 size={10} className="animate-spin" /> : <Save size={10} />}
+                        Inject
+                      </button>
+                      <button onClick={() => setInjectOpen(false)} className="px-2 py-1 text-[10px] text-text-muted hover:text-text transition-colors">Cancel</button>
+                    </div>
+                  </div>
+                )}
+
                 {/* 搜索框 + role 过滤器 */}
                 <div className="flex items-center gap-2 mb-3">
                   <div className="flex items-center gap-1.5 flex-1 h-7 px-2 bg-surface rounded-lg border border-border">
@@ -271,27 +356,57 @@ export function Inspector() {
             <div className="space-y-5">
               {/* Insights / Scope */}
               <DataCard title="Insights / Scope">
-                {detail?.scope ? (
-                  <>
-                    <div className="flex items-center gap-1 mb-2">
-                      <ArrowDownRight size={10} className="text-primary" />
-                      <span className="text-[10px] font-medium text-primary">from Main</span>
+                {scopeEditing ? (
+                  <div className="space-y-2">
+                    <textarea
+                      value={scopeDraft}
+                      onChange={(e) => setScopeDraft(e.target.value)}
+                      className="w-full h-24 px-2 py-1.5 text-[11px] font-mono bg-surface border border-border rounded-lg focus:border-primary focus:outline-none resize-y leading-relaxed"
+                      placeholder="Insights content..."
+                    />
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={async () => {
+                          if (!selectedId) return
+                          setScopeSaving(true)
+                          try {
+                            await updateScope(selectedId, scopeDraft)
+                            setScopeContent(scopeDraft)
+                            setScopeEditing(false)
+                          } catch { /* ignore */ }
+                          setScopeSaving(false)
+                        }}
+                        disabled={scopeSaving}
+                        className="flex items-center gap-1 px-2 py-1 text-[10px] font-medium bg-primary text-white rounded hover:bg-primary-dark disabled:opacity-50 transition-colors"
+                      >
+                        {scopeSaving ? <Loader2 size={10} className="animate-spin" /> : <Save size={10} />}
+                        Save
+                      </button>
+                      <button onClick={() => setScopeEditing(false)} className="px-2 py-1 text-[10px] font-medium text-text-muted hover:text-text transition-colors">Cancel</button>
                     </div>
-                    {(() => {
-                      try {
-                        const parsed = JSON.parse(detail.scope)
-                        return (
-                          <div className="bg-surface rounded-lg p-3 border border-border/30 overflow-x-auto">
-                            <JsonTree data={parsed} />
-                          </div>
-                        )
-                      } catch {
-                        return <p className="text-[11px] text-text-secondary leading-relaxed">{detail.scope}</p>
-                      }
-                    })()}
-                  </>
+                  </div>
                 ) : (
-                  <p className="text-[11px] text-text-muted italic">No insights received</p>
+                  <div className="group relative">
+                    {(scopeContent ?? detail?.scope) ? (
+                      <>
+                        <div className="flex items-center gap-1 mb-2">
+                          <ArrowDownRight size={10} className="text-primary" />
+                          <span className="text-[10px] font-medium text-primary">from Main</span>
+                        </div>
+                        <p className="text-[11px] text-text-secondary leading-relaxed whitespace-pre-wrap">{scopeContent ?? detail?.scope}</p>
+                      </>
+                    ) : (
+                      <p className="text-[11px] text-text-muted italic">No insights received</p>
+                    )}
+                    {scopeConfigured && (
+                      <button
+                        onClick={() => { setScopeDraft(scopeContent ?? detail?.scope ?? ''); setScopeEditing(true) }}
+                        className="absolute top-0 right-0 opacity-0 group-hover:opacity-100 p-1 bg-surface rounded border border-border hover:border-primary transition-all"
+                      >
+                        <Pencil size={10} className="text-text-muted hover:text-primary" />
+                      </button>
+                    )}
+                  </div>
                 )}
               </DataCard>
 

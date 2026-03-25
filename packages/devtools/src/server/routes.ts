@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
 import type { StelloAgent, StelloAgentHotConfig } from '@stello-ai/core'
-import type { LLMConfigProvider, PromptProvider, SessionAccessProvider } from './types.js'
+import type { LLMConfigProvider, PromptProvider, SessionAccessProvider, ToolsProvider, SkillsProvider, IntegrationProvider } from './types.js'
 
 /** 全局错误处理 */
 function withErrorHandler(app: Hono): void {
@@ -77,6 +77,9 @@ export function createRoutes(
   llmProvider?: LLMConfigProvider,
   promptProvider?: PromptProvider,
   sessionAccessProvider?: SessionAccessProvider,
+  toolsProvider?: ToolsProvider,
+  skillsProvider?: SkillsProvider,
+  integrationProvider?: IntegrationProvider,
 ): Hono {
   const app = new Hono()
   withErrorHandler(app)
@@ -357,6 +360,76 @@ export function createRoutes(
     await sessionAccessProvider.setSystemPrompt(id, content)
     onEvent?.({ type: 'system-prompt.updated', sessionId: id })
     return c.json({ ok: true })
+  })
+
+  /** 读取 session 的 scope/insights */
+  app.get('/sessions/:id/scope', async (c) => {
+    if (!sessionAccessProvider?.getScope) return c.json({ configured: false, content: null })
+    const id = c.req.param('id')
+    const content = await sessionAccessProvider.getScope(id)
+    return c.json({ configured: true, content })
+  })
+
+  /** 写入 session 的 scope/insights */
+  app.put('/sessions/:id/scope', async (c) => {
+    if (!sessionAccessProvider?.setScope) return c.json({ error: 'Scope editing not configured' }, 400)
+    const id = c.req.param('id')
+    const { content } = await c.req.json<{ content: string }>()
+    await sessionAccessProvider.setScope(id, content)
+    onEvent?.({ type: 'scope.updated', sessionId: id })
+    return c.json({ ok: true })
+  })
+
+  /** 注入一条对话记录到 L3 */
+  app.post('/sessions/:id/inject-record', async (c) => {
+    if (!sessionAccessProvider?.injectRecord) return c.json({ error: 'Record injection not configured' }, 400)
+    const id = c.req.param('id')
+    const { role, content } = await c.req.json<{ role: string; content: string }>()
+    if (!role || !content) return c.json({ error: 'role and content are required' }, 400)
+    await sessionAccessProvider.injectRecord(id, { role, content })
+    onEvent?.({ type: 'record.injected', sessionId: id })
+    return c.json({ ok: true })
+  })
+
+  /** 获取 tools 列表（含启用状态） */
+  app.get('/tools', (c) => {
+    if (!toolsProvider) return c.json({ configured: false, tools: [] })
+    return c.json({ configured: true, tools: toolsProvider.getTools() })
+  })
+
+  /** 切换 tool 启用/禁用 */
+  app.patch('/tools/:name', async (c) => {
+    if (!toolsProvider) return c.json({ error: 'Tools provider not configured' }, 400)
+    const name = c.req.param('name')
+    const { enabled } = await c.req.json<{ enabled: boolean }>()
+    toolsProvider.setEnabled(name, enabled)
+    onEvent?.({ type: 'tool.toggled', data: { name, enabled } })
+    return c.json({ ok: true, tools: toolsProvider.getTools() })
+  })
+
+  /** 获取 skills 列表（含启用状态） */
+  app.get('/skills', (c) => {
+    if (!skillsProvider) return c.json({ configured: false, skills: [] })
+    return c.json({ configured: true, skills: skillsProvider.getSkills() })
+  })
+
+  /** 切换 skill 启用/禁用 */
+  app.patch('/skills/:name', async (c) => {
+    if (!skillsProvider) return c.json({ error: 'Skills provider not configured' }, 400)
+    const name = c.req.param('name')
+    const { enabled } = await c.req.json<{ enabled: boolean }>()
+    skillsProvider.setEnabled(name, enabled)
+    onEvent?.({ type: 'skill.toggled', data: { name, enabled } })
+    return c.json({ ok: true, skills: skillsProvider.getSkills() })
+  })
+
+  /** 手动触发 integration */
+  app.post('/integrate', async (c) => {
+    if (!integrationProvider) return c.json({ error: 'Integration provider not configured' }, 400)
+    onEvent?.({ type: 'integrate.start' })
+    const result = await integrationProvider.trigger()
+    onEvent?.({ type: 'integrate.done', data: { synthesis: result.synthesis.slice(0, 100), insightCount: result.insightCount } })
+    return c.json({ ok: true, ...result })
   })
 
   /** 获取事件历史 */

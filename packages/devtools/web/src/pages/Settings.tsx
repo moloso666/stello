@@ -25,7 +25,7 @@ import {
   EyeOff,
   FileText,
 } from 'lucide-react'
-import { fetchConfig, patchConfig, fetchLLMConfig, patchLLMConfig, fetchPrompts, patchPrompts, type AgentConfig, type HotConfigPatch, type LLMConfig, type PromptsConfig } from '@/lib/api'
+import { fetchConfig, patchConfig, fetchLLMConfig, patchLLMConfig, fetchPrompts, patchPrompts, fetchTools, toggleTool, fetchSkills, toggleSkill, type AgentConfig, type HotConfigPatch, type LLMConfig, type PromptsConfig, type ToolWithStatus, type SkillWithStatus } from '@/lib/api'
 
 /** 配置卡片 */
 function Card({ title, icon: Icon, children }: { title: string; icon: React.ElementType; children: React.ReactNode }) {
@@ -255,6 +255,8 @@ export function SettingsPage() {
   const [promptsEditing, setPromptsEditing] = useState(false)
   const [promptsDraft, setPromptsDraft] = useState({ consolidate: '', integrate: '' })
   const [promptsSaving, setPromptsSaving] = useState(false)
+  const [toolsList, setToolsList] = useState<{ configured: boolean; tools: ToolWithStatus[] }>({ configured: false, tools: [] })
+  const [skillsList, setSkillsList] = useState<{ configured: boolean; skills: SkillWithStatus[] }>({ configured: false, skills: [] })
 
   useEffect(() => {
     fetchConfig()
@@ -277,6 +279,8 @@ export function SettingsPage() {
         }
       })
       .catch(() => {})
+    fetchTools().then(setToolsList).catch(() => {})
+    fetchSkills().then(setSkillsList).catch(() => {})
   }, [])
 
   /** 通用 patch 并刷新 state */
@@ -764,13 +768,24 @@ export function SettingsPage() {
 
           <div className="h-px bg-border my-3" />
           <Collapsible title="TOOLS" count={config.capabilities.tools.length} defaultOpen={config.capabilities.tools.length <= 5}>
-            {config.capabilities.tools.map((tool) => (
-              <div key={tool.name} className="flex items-start gap-2 pl-2">
-                <Wrench size={12} className="text-primary shrink-0 mt-0.5" />
-                <div className="min-w-0">
-                  <span className="text-xs font-medium text-text">{tool.name}</span>
+            {(toolsList.configured ? toolsList.tools : config.capabilities.tools.map((t) => ({ ...t, enabled: true }))).map((tool) => (
+              <div key={tool.name} className="flex items-center gap-2 pl-2 py-0.5">
+                <Wrench size={12} className={`shrink-0 ${tool.enabled ? 'text-primary' : 'text-text-muted'}`} />
+                <div className="flex-1 min-w-0">
+                  <span className={`text-xs font-medium ${tool.enabled ? 'text-text' : 'text-text-muted line-through'}`}>{tool.name}</span>
                   <p className="text-[10px] text-text-muted truncate">{tool.description}</p>
                 </div>
+                {toolsList.configured && (
+                  <button
+                    onClick={async () => {
+                      const result = await toggleTool(tool.name, !tool.enabled)
+                      setToolsList((prev) => ({ ...prev, tools: result.tools }))
+                    }}
+                    className={`shrink-0 w-8 h-4 rounded-full transition-colors relative ${tool.enabled ? 'bg-primary' : 'bg-border'}`}
+                  >
+                    <div className={`absolute top-0.5 w-3 h-3 rounded-full bg-white shadow transition-transform ${tool.enabled ? 'translate-x-4' : 'translate-x-0.5'}`} />
+                  </button>
+                )}
               </div>
             ))}
             {config.capabilities.tools.length === 0 && (
@@ -780,13 +795,24 @@ export function SettingsPage() {
 
           <div className="h-px bg-border my-3" />
           <Collapsible title="SKILLS" count={config.capabilities.skills.length} defaultOpen={config.capabilities.skills.length <= 5}>
-            {config.capabilities.skills.map((skill) => (
-              <div key={skill.name} className="flex items-start gap-2 pl-2">
-                <Zap size={12} className="text-[#D89575] shrink-0 mt-0.5" />
-                <div className="min-w-0">
-                  <span className="text-xs font-medium text-text">{skill.name}</span>
+            {(skillsList.configured ? skillsList.skills : config.capabilities.skills.map((s) => ({ ...s, enabled: true }))).map((skill) => (
+              <div key={skill.name} className="flex items-center gap-2 pl-2 py-0.5">
+                <Zap size={12} className={`shrink-0 ${skill.enabled ? 'text-[#D89575]' : 'text-text-muted'}`} />
+                <div className="flex-1 min-w-0">
+                  <span className={`text-xs font-medium ${skill.enabled ? 'text-text' : 'text-text-muted line-through'}`}>{skill.name}</span>
                   <p className="text-[10px] text-text-muted truncate">{skill.description}</p>
                 </div>
+                {skillsList.configured && (
+                  <button
+                    onClick={async () => {
+                      const result = await toggleSkill(skill.name, !skill.enabled)
+                      setSkillsList((prev) => ({ ...prev, skills: result.skills }))
+                    }}
+                    className={`shrink-0 w-8 h-4 rounded-full transition-colors relative ${skill.enabled ? 'bg-primary' : 'bg-border'}`}
+                  >
+                    <div className={`absolute top-0.5 w-3 h-3 rounded-full bg-white shadow transition-transform ${skill.enabled ? 'translate-x-4' : 'translate-x-0.5'}`} />
+                  </button>
+                )}
               </div>
             ))}
             {config.capabilities.skills.length === 0 && (
