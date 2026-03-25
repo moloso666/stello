@@ -160,13 +160,19 @@ async function bootstrap() {
     baseURL: openaiBaseURL,
     model: openaiModel,
   })
-  let currentLlmConfig = { model: openaiModel, baseURL: openaiBaseURL, apiKey: openaiApiKey! }
+  let currentLlmConfig = { model: openaiModel, baseURL: openaiBaseURL, apiKey: openaiApiKey!, temperature: 0.7, maxTokens: 1024 }
 
-  /* LLM 调用函数——从 currentLlm 实时读取，支持热更新 */
+  /* LLM 调用函数——从 currentLlm 实时读取，用 currentLlmConfig 的 temperature/maxTokens */
   const llmCall: LLMCallFn = async (messages) => {
-    const result = await currentLlm.complete(messages.map((m) => ({ role: m.role as 'user' | 'assistant' | 'system', content: m.content })))
+    const result = await currentLlm.complete(
+      messages.map((m) => ({ role: m.role as 'user' | 'assistant' | 'system', content: m.content })),
+      { temperature: currentLlmConfig.temperature, maxTokens: currentLlmConfig.maxTokens },
+    )
     return result.content
   }
+
+  let currentConsolidatePrompt = DEFAULT_CONSOLIDATE_PROMPT
+  let currentIntegratePrompt = DEFAULT_INTEGRATE_PROMPT
 
   const sessionStorage = new InMemoryStorageAdapter()
   const sessionMap = new Map<string, WrappedSession | WrappedMainSession>()
@@ -326,9 +332,15 @@ async function bootstrap() {
         return wrapSession(sessionId, entry.session)
       },
       mainSessionResolver: async () => mainSession,
-      /* LLM 驱动的 consolidation 和 integration */
-      consolidateFn: createDefaultConsolidateFn(DEFAULT_CONSOLIDATE_PROMPT, llmCall),
-      integrateFn: createDefaultIntegrateFn(DEFAULT_INTEGRATE_PROMPT, llmCall),
+      /* LLM 驱动的 consolidation 和 integration——prompt 通过 mutable ref 支持热更新 */
+      consolidateFn: (currentMemory, messages) => {
+        const fn = createDefaultConsolidateFn(currentConsolidatePrompt, llmCall)
+        return fn(currentMemory, messages)
+      },
+      integrateFn: (children, currentSynthesis) => {
+        const fn = createDefaultIntegrateFn(currentIntegratePrompt, llmCall)
+        return fn(children, currentSynthesis)
+      },
     },
     capabilities: {
       lifecycle,
@@ -367,16 +379,46 @@ async function bootstrap() {
     setCurrentSessionId: (sessionId: string) => {
       currentSessionId = sessionId
     },
+    /** Session 访问能力，供 DevTools 读写 system prompt */
+    sessionAccess: {
+      async getSystemPrompt(sessionId: string) {
+        const entry = sessionMap.get(sessionId)
+        if (!entry) return null
+        const s = 'main' in entry && entry.main ? entry.main : entry.session
+        return s.systemPrompt()
+      },
+      async setSystemPrompt(sessionId: string, content: string) {
+        const entry = sessionMap.get(sessionId)
+        if (!entry) return
+        const s = 'main' in entry && entry.main ? entry.main : entry.session
+        await s.setSystemPrompt(content)
+      },
+    },
+    /** Consolidation/Integration 提示词 getter/setter */
+    prompts: {
+      getPrompts: () => ({ consolidate: currentConsolidatePrompt, integrate: currentIntegratePrompt }),
+      setPrompts: (p: { consolidate?: string; integrate?: string }) => {
+        if (p.consolidate) currentConsolidatePrompt = p.consolidate
+        if (p.integrate) currentIntegratePrompt = p.integrate
+        console.log('[Prompts] Updated consolidation/integration prompts')
+      },
+    },
     /** LLM 配置 getter/setter，供 DevTools 热切换 */
     llm: {
       getConfig: () => ({ ...currentLlmConfig }),
-      setConfig: (config: { model: string; baseURL: string; apiKey?: string }) => {
+      setConfig: (config: { model: string; baseURL: string; apiKey?: string; temperature?: number; maxTokens?: number }) => {
         const newLlm = createOpenAICompatibleAdapter({
           apiKey: config.apiKey ?? currentLlmConfig.apiKey,
           baseURL: config.baseURL,
           model: config.model,
         })
-        currentLlmConfig = { model: config.model, baseURL: config.baseURL, apiKey: config.apiKey ?? currentLlmConfig.apiKey }
+        currentLlmConfig = {
+          model: config.model,
+          baseURL: config.baseURL,
+          apiKey: config.apiKey ?? currentLlmConfig.apiKey,
+          temperature: config.temperature ?? currentLlmConfig.temperature,
+          maxTokens: config.maxTokens ?? currentLlmConfig.maxTokens,
+        }
         currentLlm = newLlm
         /* 遍历所有 session 替换 LLM adapter */
         for (const entry of sessionMap.values()) {
@@ -408,7 +450,13 @@ async function main() {
 
   /* 启动 DevTools 调试面板（唯一的 UI 入口） */
   const devtoolsPort = Number(process.env.DEVTOOLS_PORT ?? 4800)
-  const dt = await startDevtools(app.agent, { port: devtoolsPort, open: true, llm: app.llm })
+  const dt = await startDevtools(app.agent, {
+    port: devtoolsPort,
+    open: true,
+    llm: app.llm,
+    prompts: app.prompts,
+    sessionAccess: app.sessionAccess,
+  })
 
   console.log(`\nStello Agent Demo`)
   console.log(`  Model:    ${openaiModel}`)
