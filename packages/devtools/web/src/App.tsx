@@ -1,7 +1,8 @@
 import { Routes, Route, NavLink, Navigate, useLocation } from 'react-router-dom'
-import { Sparkles, MessageSquare, Search, Activity, Settings, Globe } from 'lucide-react'
+import { Sparkles, MessageSquare, Search, Activity, Settings, Globe, Sun, Moon } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { I18nContext, useI18n, useI18nProvider } from '@/lib/i18n'
+import { useTheme } from '@/lib/theme'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { Topology } from '@/pages/Topology'
 import { Conversation } from '@/pages/Conversation'
@@ -9,7 +10,7 @@ import { Inspector } from '@/pages/Inspector'
 import { Events } from '@/pages/Events'
 import { SettingsPage } from '@/pages/Settings'
 
-/** 侧边栏导航项（i18n key 而非硬编码文本） */
+/** 侧边栏导航项 */
 const navItems = [
   { to: '/topology', icon: Sparkles, labelKey: 'nav.map' },
   { to: '/conversation', icon: MessageSquare, labelKey: 'nav.chat' },
@@ -54,6 +55,20 @@ function LocaleSwitcher() {
   )
 }
 
+/** 主题切换按钮 */
+function ThemeSwitcher() {
+  const { theme, toggle } = useTheme()
+  return (
+    <button
+      onClick={toggle}
+      className="flex items-center justify-center w-9 h-9 rounded-[10px] text-text-muted hover:bg-muted hover:text-text-secondary transition-all duration-200 hover:scale-105"
+      title={theme === 'light' ? 'Dark mode' : 'Light mode'}
+    >
+      {theme === 'light' ? <Moon size={16} /> : <Sun size={16} />}
+    </button>
+  )
+}
+
 /** 主应用布局 */
 export function App() {
   const location = useLocation()
@@ -63,14 +78,15 @@ export function App() {
     <I18nContext.Provider value={i18n}>
       <div className="flex h-screen w-screen overflow-hidden">
         {/* 侧边栏 */}
-        <nav className="flex flex-col items-center w-16 bg-card border-r border-border py-4 gap-2 shrink-0">
+        <nav className="flex flex-col items-center w-16 bg-card border-r border-border py-4 gap-2 shrink-0 transition-colors duration-200">
           <div className="flex items-center justify-center w-9 h-9 bg-primary rounded-[10px] mb-3 shadow-md transition-transform duration-200 hover:scale-110 cursor-pointer">
             <span className="text-white text-lg font-bold">S</span>
           </div>
           {navItems.map((item) => (
             <NavItem key={item.to} {...item} />
           ))}
-          <div className="mt-auto">
+          <div className="mt-auto flex flex-col gap-1">
+            <ThemeSwitcher />
             <LocaleSwitcher />
           </div>
         </nav>
