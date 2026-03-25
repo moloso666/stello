@@ -189,7 +189,7 @@ function createFileMemoryEngine(fs: NodeFileSystemAdapter, sessions: SessionTree
 async function bootstrap() {
   const fs = new NodeFileSystemAdapter(dataDir)
   const sessions = new SessionTreeImpl(fs)
-  let currentLlm = createOpenAICompatibleAdapter({ apiKey: openaiApiKey!, baseURL: openaiBaseURL, model: openaiModel })
+  let currentLlm = createOpenAICompatibleAdapter({ apiKey: openaiApiKey!, baseURL: openaiBaseURL, model: openaiModel, extraBody: { reasoning_split: true } })
   let currentLlmConfig = { model: openaiModel, baseURL: openaiBaseURL, apiKey: openaiApiKey!, temperature: 0.7, maxTokens: 2048 }
 
   const llmCall: LLMCallFn = async (messages) => {
@@ -435,7 +435,7 @@ async function bootstrap() {
     llm: {
       getConfig: () => ({ ...currentLlmConfig }),
       setConfig: (cfg: { model: string; baseURL: string; apiKey?: string; temperature?: number; maxTokens?: number }) => {
-        const newLlm = createOpenAICompatibleAdapter({ apiKey: cfg.apiKey ?? currentLlmConfig.apiKey, baseURL: cfg.baseURL, model: cfg.model })
+        const newLlm = createOpenAICompatibleAdapter({ apiKey: cfg.apiKey ?? currentLlmConfig.apiKey, baseURL: cfg.baseURL, model: cfg.model, extraBody: { reasoning_split: true } })
         currentLlmConfig = { model: cfg.model, baseURL: cfg.baseURL, apiKey: cfg.apiKey ?? currentLlmConfig.apiKey, temperature: cfg.temperature ?? currentLlmConfig.temperature, maxTokens: cfg.maxTokens ?? currentLlmConfig.maxTokens }
         currentLlm = newLlm
         for (const entry of sessionMap.values()) {
