@@ -17,19 +17,10 @@
 
 ---
 
-## Phase 3：Topology 交互增强
+## ~~Phase 3：Topology 交互增强~~ ✅
 
-### 3.1 右键菜单
-- 节点右键弹出操作菜单：Enter Session / Fork / Archive / View in Inspector
-- 调用对应 API 后刷新拓扑图
-
-### 3.2 节点间过渡动画
-- 从 Topology 点击节点跳转到 Conversation 时，加过渡动画（而非突兀切换）
-- 考虑 shared layout animation 或 page transition
-
-### 3.3 实时拓扑更新
-- WS 接收 fork/archive 事件时自动重绘拓扑图
-- 新节点出现时有 pop-in 动画
+> 已完成：右键菜单（Enter/Fork/Archive/Inspector）+ 面板导航修复 + Fork/Archive 按钮 + WS 实时更新 + 新节点 pop-in 动画
+> 3.2 节点间过渡动画评估后不做（投入产出比低），保持现有 fadeIn
 
 ---
 
@@ -72,3 +63,4 @@
 - [x] docs/stello-agent-config-reference.md 配置完全参考文档
 - [x] Phase 1 配置热更新（idleTtlMs / Scheduler / SplitGuard + PATCH /config + 前端编辑 + 导入导出）
 - [x] Phase 2 对话过程可观测（tool call 卡片 + highlight.js 代码高亮 + Events label 自动刷新）
+- [x] Phase 3 Topology 交互增强（右键菜单 + 面板修复 + WS 实时更新 + pop-in 动画）
