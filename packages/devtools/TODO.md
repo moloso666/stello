@@ -11,20 +11,9 @@
 
 ---
 
-## Phase 2：对话过程可观测
+## ~~Phase 2：对话过程可观测~~ ✅
 
-### 2.1 Conversation 工具调用展示
-- 目前 tool call 过程不可见，只看到最终结果
-- 流式输出中解析 tool call chunk，展示调用链：tool name → args → result → duration
-- UI：折叠式 tool call 卡片，嵌套在 assistant 消息下方
-
-### 2.2 Conversation 代码高亮
-- 当前 Markdown 渲染没有语法高亮
-- 接入 `shiki` 或 `highlight.js` 给代码块加语法着色
-
-### 2.3 Events 页面增强
-- session 列目前靠启动时拉一次列表建映射，新 session 不会自动更新映射
-- fork.created 事件到来时自动刷新 session label 映射
+> 已完成：流式 tool call 事件 + 折叠式卡片 / highlight.js 代码高亮 / Events label 自动刷新
 
 ---
 
@@ -82,3 +71,4 @@
 - [x] 清理 debug log / 无用 import / 空壳 PATCH
 - [x] docs/stello-agent-config-reference.md 配置完全参考文档
 - [x] Phase 1 配置热更新（idleTtlMs / Scheduler / SplitGuard + PATCH /config + 前端编辑 + 导入导出）
+- [x] Phase 2 对话过程可观测（tool call 卡片 + highlight.js 代码高亮 + Events label 自动刷新）

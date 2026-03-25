@@ -68,14 +68,16 @@ export function Events() {
   const [sessionLabels, setSessionLabels] = useState<Record<string, string>>({})
   const nextIdRef = useRef(100)
 
-  /* 拉取 session 列表建立 id→label 映射 */
-  useEffect(() => {
+  /** 拉取 session 列表建立 id→label 映射 */
+  const refreshLabels = useCallback(() => {
     fetch('/api/sessions').then((r) => r.json()).then((body: { sessions: Array<{ id: string; label: string }> }) => {
       const map: Record<string, string> = {}
       for (const s of body.sessions) map[s.id] = s.label
       setSessionLabels(map)
     }).catch(() => {})
   }, [])
+
+  useEffect(() => { refreshLabels() }, [refreshLabels])
 
   /** 将 raw event 转成 StelloEvent */
   const parseEvent = useCallback((msg: Record<string, unknown>): StelloEvent | null => {
@@ -118,6 +120,8 @@ export function Events() {
       ws.onmessage = (event) => {
         try {
           const msg = JSON.parse(event.data as string) as Record<string, unknown>
+          const rawType = String(msg['type'] ?? '')
+          if (rawType === 'fork.created') refreshLabels()
           const parsed = parseEvent(msg)
           if (parsed) setEvents((prev) => [parsed, ...prev])
         } catch { /* ignore */ }
