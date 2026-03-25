@@ -18,6 +18,8 @@ import {
   Save,
   Download,
   Upload,
+  Pencil,
+  Info,
 } from 'lucide-react'
 import { fetchConfig, patchConfig, type AgentConfig, type HotConfigPatch } from '@/lib/api'
 
@@ -132,9 +134,11 @@ function EditableNumber({
     return (
       <button
         onClick={() => { setDraft(String(value)); setEditing(true) }}
-        className="text-xs font-medium text-text hover:text-primary cursor-pointer border-b border-dashed border-text-muted/30 hover:border-primary transition-colors"
+        className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium text-text bg-primary/5 hover:bg-primary/15 border border-primary/20 hover:border-primary/40 rounded cursor-pointer transition-colors group"
+        title="Click to edit"
       >
         {value}
+        <Pencil size={9} className="text-text-muted group-hover:text-primary transition-colors" />
       </button>
     )
   }
@@ -191,9 +195,11 @@ function EditableSelect({
     return (
       <button
         onClick={() => { setDraft(value); setEditing(true) }}
-        className="text-[11px] font-mono bg-surface px-2 py-0.5 rounded border border-border text-primary-dark hover:border-primary cursor-pointer transition-colors"
+        className="inline-flex items-center gap-1 text-[11px] font-mono px-2 py-0.5 rounded bg-primary/5 hover:bg-primary/15 border border-primary/20 hover:border-primary/40 text-primary-dark cursor-pointer transition-colors group"
+        title="Click to edit"
       >
         {value}
+        <Pencil size={9} className="text-text-muted group-hover:text-primary transition-colors" />
       </button>
     )
   }
@@ -369,8 +375,11 @@ export function SettingsPage() {
         {/* Scheduling */}
         <Card title="Scheduling Policy" icon={Clock}>
           {!config.scheduling.hasScheduler && (
-            <div className="flex items-center gap-2 mb-3">
-              <Tag variant="default">No scheduler — manual only</Tag>
+            <div className="flex items-center gap-2 mb-3 px-3 py-2 bg-warning/5 rounded-lg border border-warning/15">
+              <Info size={12} className="text-warning shrink-0" />
+              <p className="text-[10px] text-text-muted">
+                No Scheduler configured — fields are read-only. Pass <code className="text-[10px] font-mono text-primary-dark">scheduler: new Scheduler(...)</code> in orchestration config to enable.
+              </p>
             </div>
           )}
           <div className="bg-surface rounded-lg p-3 mb-3">
@@ -455,7 +464,12 @@ export function SettingsPage() {
               </Row>
             </>
           ) : (
-            <p className="text-[11px] text-text-muted italic">No SplitGuard configured — no split restrictions</p>
+            <div className="flex items-center gap-2 px-3 py-2 bg-warning/5 rounded-lg border border-warning/15">
+              <Info size={12} className="text-warning shrink-0" />
+              <p className="text-[10px] text-text-muted">
+                No SplitGuard configured. Pass <code className="text-[10px] font-mono text-primary-dark">splitGuard: new SplitGuard(...)</code> in orchestration config to enable.
+              </p>
+            </div>
           )}
         </Card>
 
