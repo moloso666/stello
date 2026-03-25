@@ -2,6 +2,8 @@ import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import rehypeHighlight from 'rehype-highlight'
+import 'highlight.js/styles/atom-one-dark.css'
 import {
   Search,
   Zap,
@@ -10,6 +12,11 @@ import {
   ArrowUp,
   ArrowDownRight,
   Loader2,
+  ChevronDown,
+  ChevronRight,
+  CheckCircle2,
+  XCircle,
+  Clock,
 } from 'lucide-react'
 import { fetchSessions, fetchConfig, fetchSessionDetail, enterSession, consolidateSession, type AgentConfig, type SessionDetail } from '@/lib/api'
 
@@ -22,13 +29,23 @@ interface SessionItem {
   color: string
 }
 
+/** Tool call 详情 */
+interface ToolCallInfo {
+  id: string
+  name: string
+  args: string
+  result?: string
+  success?: boolean
+  duration?: number
+}
+
 /** 对话消息 */
 interface ChatMessage {
   id: string
   role: 'user' | 'assistant'
   content: string
   streaming?: boolean
-  toolCall?: { name: string; args: string; duration: string }
+  toolCalls?: ToolCallInfo[]
 }
 
 /** 过滤 think 标签——提取 think 内容和正文 */
@@ -57,9 +74,54 @@ function MarkdownMessage({ text, streaming }: { text: string; streaming?: boolea
         </details>
       )}
       <div className="prose-sm max-w-none text-text [&_p]:my-1 [&_p]:text-[13px] [&_p]:leading-relaxed [&_p]:text-text [&_ul]:my-1 [&_ol]:my-1 [&_li]:text-[13px] [&_li]:text-text [&_strong]:text-text [&_strong]:font-semibold [&_h1]:text-base [&_h1]:text-text [&_h1]:font-semibold [&_h2]:text-sm [&_h2]:text-text [&_h3]:text-[13px] [&_h3]:text-text [&_code]:text-[11px] [&_code]:bg-surface [&_code]:text-primary-dark [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded [&_pre]:bg-[#2a2520] [&_pre]:text-[#e5e4e1] [&_pre]:rounded-lg [&_pre]:p-3 [&_pre]:text-[11px] [&_pre_code]:bg-transparent [&_pre_code]:p-0 [&_pre_code]:text-[#e5e4e1] [&_blockquote]:border-l-2 [&_blockquote]:border-primary/30 [&_blockquote]:pl-3 [&_blockquote]:text-text-secondary [&_a]:text-primary [&_a]:underline [&_table]:text-[12px] [&_th]:px-2 [&_th]:py-1 [&_td]:px-2 [&_td]:py-1 [&_th]:bg-surface [&_th]:border-b [&_th]:border-border [&_hr]:border-border">
-        <ReactMarkdown remarkPlugins={[remarkGfm]}>{displayText}</ReactMarkdown>
+        <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]}>{displayText}</ReactMarkdown>
       </div>
       {streaming && <span className="inline-block w-1.5 h-4 bg-primary/60 animate-pulse rounded-sm" />}
+    </div>
+  )
+}
+
+/** 折叠式 tool call 卡片 */
+function ToolCallCard({ toolCall }: { toolCall: ToolCallInfo }) {
+  const [open, setOpen] = useState(false)
+  const hasResult = toolCall.result !== undefined
+
+  return (
+    <div className="border border-border/40 rounded-lg overflow-hidden bg-card/50">
+      <button
+        onClick={() => setOpen(!open)}
+        className="flex items-center gap-2 w-full px-3 py-2 text-left hover:bg-surface/50 transition-colors"
+      >
+        {open ? <ChevronDown size={12} className="text-text-muted shrink-0" /> : <ChevronRight size={12} className="text-text-muted shrink-0" />}
+        <Terminal size={12} className="text-primary shrink-0" />
+        <span className="text-[11px] font-semibold text-primary-dark">{toolCall.name}</span>
+        {hasResult && (
+          toolCall.success
+            ? <CheckCircle2 size={11} className="text-success shrink-0" />
+            : <XCircle size={11} className="text-error shrink-0" />
+        )}
+        {!hasResult && <Loader2 size={11} className="text-text-muted animate-spin shrink-0" />}
+        {toolCall.duration !== undefined && (
+          <span className="flex items-center gap-0.5 text-[10px] text-text-muted ml-auto">
+            <Clock size={9} />
+            {toolCall.duration}ms
+          </span>
+        )}
+      </button>
+      {open && (
+        <div className="border-t border-border/30 px-3 py-2 space-y-2">
+          <div>
+            <p className="text-[9px] font-semibold text-text-muted tracking-wide mb-1">ARGUMENTS</p>
+            <pre className="text-[10px] font-mono bg-surface rounded p-2 text-text-secondary overflow-x-auto max-h-32 overflow-y-auto">{toolCall.args}</pre>
+          </div>
+          {toolCall.result !== undefined && (
+            <div>
+              <p className="text-[9px] font-semibold text-text-muted tracking-wide mb-1">RESULT</p>
+              <pre className={`text-[10px] font-mono bg-surface rounded p-2 overflow-x-auto max-h-32 overflow-y-auto ${toolCall.success ? 'text-text-secondary' : 'text-error'}`}>{toolCall.result}</pre>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }
@@ -232,6 +294,7 @@ export function Conversation() {
         const decoder = new TextDecoder()
         let buffer = ''
         let fullContent = ''
+        const pendingToolCalls: ToolCallInfo[] = []
 
         while (true) {
           const { done, value } = await reader.read()
@@ -248,12 +311,32 @@ export function Conversation() {
                 const delta = String(chunk['delta'] ?? '')
                 fullContent += delta
                 setMessages((prev) => prev.map((m) => m.id === botId ? { ...m, content: fullContent } : m))
+              } else if (chunk['type'] === 'tool_call') {
+                const tc = chunk['toolCall'] as Record<string, unknown>
+                pendingToolCalls.push({
+                  id: String(tc['id'] ?? tc['name']),
+                  name: String(tc['name']),
+                  args: typeof tc['args'] === 'object' ? JSON.stringify(tc['args'], null, 2) : String(tc['args'] ?? ''),
+                })
+                setMessages((prev) => prev.map((m) => m.id === botId ? { ...m, toolCalls: [...pendingToolCalls] } : m))
+              } else if (chunk['type'] === 'tool_result') {
+                const tr = chunk['result'] as Record<string, unknown>
+                const callId = String(tr['toolCallId'] ?? tr['toolName'])
+                const idx = pendingToolCalls.findIndex((tc) => tc.id === callId)
+                if (idx >= 0) {
+                  pendingToolCalls[idx] = {
+                    ...pendingToolCalls[idx]!,
+                    success: tr['success'] as boolean,
+                    result: typeof tr['data'] === 'object' ? JSON.stringify(tr['data'], null, 2) : String(tr['data'] ?? ''),
+                    duration: tr['duration'] as number | undefined,
+                  }
+                  setMessages((prev) => prev.map((m) => m.id === botId ? { ...m, toolCalls: [...pendingToolCalls] } : m))
+                }
               } else if (chunk['type'] === 'done') {
-                /* 流结束——用完整结果替换 */
                 const result = chunk['result'] as Record<string, unknown> | undefined
                 const turn = result?.['turn'] as Record<string, unknown> | undefined
                 const finalContent = turn?.['finalContent'] ?? turn?.['rawResponse'] ?? fullContent
-                setMessages((prev) => prev.map((m) => m.id === botId ? { ...m, content: String(finalContent), streaming: false } : m))
+                setMessages((prev) => prev.map((m) => m.id === botId ? { ...m, content: String(finalContent), streaming: false, toolCalls: pendingToolCalls.length > 0 ? [...pendingToolCalls] : m.toolCalls } : m))
               }
             } catch { /* ignore parse error */ }
           }
@@ -368,11 +451,11 @@ export function Conversation() {
                   <div className="bg-card rounded-xl rounded-bl-sm px-3.5 py-2.5 max-w-lg shadow-sm border border-border/30 transition-shadow hover:shadow-md">
                     <MarkdownMessage text={msg.content} streaming={msg.streaming} />
                   </div>
-                  {msg.toolCall && (
-                    <div className="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-[#FFF5EE] rounded-lg border border-primary/20 transition-all hover:bg-[#FFF0E5] hover:shadow-sm cursor-pointer">
-                      <Terminal size={12} className="text-primary" />
-                      <span className="text-[11px] font-medium text-primary-dark">{msg.toolCall.name}({msg.toolCall.args})</span>
-                      <span className="text-[10px] text-text-muted">{msg.toolCall.duration}</span>
+                  {msg.toolCalls && msg.toolCalls.length > 0 && (
+                    <div className="space-y-1.5 max-w-lg">
+                      {msg.toolCalls.map((tc) => (
+                        <ToolCallCard key={tc.id} toolCall={tc} />
+                      ))}
                     </div>
                   )}
                 </div>

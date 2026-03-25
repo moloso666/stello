@@ -147,24 +147,57 @@ export function createRoutes(
     return c.json(result)
   })
 
-  /** 流式对话（NDJSON） */
+  /** 流式对话（NDJSON，含 tool call 事件） */
   app.post('/sessions/:id/stream', async (c) => {
     const id = c.req.param('id')
     const { input } = await c.req.json<{ input: string }>()
     try {
-      const stream = await agent.stream(id, input)
       const encoder = new TextEncoder()
+      const toolCallTimers = new Map<string, number>()
+
+      /* 先用 let 声明 controller，在 ReadableStream 回调中赋值 */
+      let ctrl: ReadableStreamDefaultController<Uint8Array> | null = null
+      const emit = (data: Record<string, unknown>) => {
+        ctrl?.enqueue(encoder.encode(JSON.stringify(data) + '\n'))
+      }
+
+      const stream = await agent.stream(id, input, {
+        onToolCall: (toolCall) => {
+          const callId = toolCall.id ?? toolCall.name
+          toolCallTimers.set(callId, Date.now())
+          emit({ type: 'tool_call', toolCall: { id: callId, name: toolCall.name, args: toolCall.args } })
+        },
+        onToolResult: (result) => {
+          const callId = result.toolCallId ?? result.toolName
+          const startTime = toolCallTimers.get(callId)
+          const duration = startTime ? Date.now() - startTime : undefined
+          toolCallTimers.delete(callId)
+          emit({
+            type: 'tool_result',
+            result: {
+              toolCallId: callId,
+              toolName: result.toolName,
+              success: result.success,
+              data: result.data,
+              error: result.error,
+              duration,
+            },
+          })
+        },
+      })
+
       const readable = new ReadableStream({
         async start(controller) {
+          ctrl = controller
           try {
             for await (const chunk of stream) {
-              controller.enqueue(encoder.encode(JSON.stringify({ type: 'delta', delta: chunk }) + '\n'))
+              emit({ type: 'delta', delta: chunk })
             }
             const result = await stream.result
-            controller.enqueue(encoder.encode(JSON.stringify({ type: 'done', result }) + '\n'))
+            emit({ type: 'done', result })
           } catch (err) {
             const msg = err instanceof Error ? err.message : String(err)
-            controller.enqueue(encoder.encode(JSON.stringify({ type: 'error', error: msg }) + '\n'))
+            emit({ type: 'error', error: msg })
           } finally {
             controller.close()
           }
