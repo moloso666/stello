@@ -155,15 +155,16 @@ function createFileMemoryEngine(fs: NodeFileSystemAdapter, sessions: SessionTree
 async function bootstrap() {
   const fs = new NodeFileSystemAdapter(dataDir)
   const sessions = new SessionTreeImpl(fs)
-  const llm = createOpenAICompatibleAdapter({
+  let currentLlm = createOpenAICompatibleAdapter({
     apiKey: openaiApiKey!,
     baseURL: openaiBaseURL,
     model: openaiModel,
   })
+  let currentLlmConfig = { model: openaiModel, baseURL: openaiBaseURL, apiKey: openaiApiKey! }
 
-  /* LLM 调用函数——复用 session 的 adapter 给 consolidation/integration 用 */
+  /* LLM 调用函数——从 currentLlm 实时读取，支持热更新 */
   const llmCall: LLMCallFn = async (messages) => {
-    const result = await llm.complete(messages.map((m) => ({ role: m.role as 'user' | 'assistant' | 'system', content: m.content })))
+    const result = await currentLlm.complete(messages.map((m) => ({ role: m.role as 'user' | 'assistant' | 'system', content: m.content })))
     return result.content
   }
 
@@ -200,7 +201,7 @@ async function bootstrap() {
 
   const mainSession = await createMainSession({
     storage: sessionStorage,
-    llm,
+    llm: currentLlm,
     label: root.label,
     systemPrompt: '你是 Stello 的演示助手。回答简洁、直接，优先中文。当用户明确要求创建子 session / 子会话 / 新会话时，必须调用 stello_create_session 工具，不要只用文字描述。',
     tools: [...sessionTools],
@@ -214,7 +215,7 @@ async function bootstrap() {
     if (sessionMap.has(meta.id)) continue
     const childSession = await createSession({
       storage: sessionStorage,
-      llm,
+      llm: currentLlm,
       label: meta.label,
       systemPrompt: `你当前专注于子话题：${meta.scope ?? meta.label}。回答时只围绕当前子话题。当用户明确要求创建新的子 session / 子会话时，必须调用 stello_create_session 工具。`,
       tools: [...sessionTools],
@@ -246,7 +247,7 @@ async function bootstrap() {
       const child = await sessions.createChild(options)
       const childSession = await createSession({
         storage: sessionStorage,
-        llm,
+        llm: currentLlm,
         label: child.label,
         systemPrompt: `你当前专注于子话题：${child.scope ?? child.label}。回答时只围绕当前子话题。当用户明确要求创建新的子 session / 子会话时，必须调用 stello_create_session 工具。`,
         tools: [...sessionTools],
@@ -366,6 +367,25 @@ async function bootstrap() {
     setCurrentSessionId: (sessionId: string) => {
       currentSessionId = sessionId
     },
+    /** LLM 配置 getter/setter，供 DevTools 热切换 */
+    llm: {
+      getConfig: () => ({ ...currentLlmConfig }),
+      setConfig: (config: { model: string; baseURL: string; apiKey?: string }) => {
+        const newLlm = createOpenAICompatibleAdapter({
+          apiKey: config.apiKey ?? currentLlmConfig.apiKey,
+          baseURL: config.baseURL,
+          model: config.model,
+        })
+        currentLlmConfig = { model: config.model, baseURL: config.baseURL, apiKey: config.apiKey ?? currentLlmConfig.apiKey }
+        currentLlm = newLlm
+        /* 遍历所有 session 替换 LLM adapter */
+        for (const entry of sessionMap.values()) {
+          const s = 'main' in entry && entry.main ? entry.main : entry.session
+          s.setLLM(newLlm)
+        }
+        console.log(`[LLM] Switched to ${config.model} @ ${config.baseURL}`)
+      },
+    },
   }
 }
 
@@ -388,7 +408,7 @@ async function main() {
 
   /* 启动 DevTools 调试面板（唯一的 UI 入口） */
   const devtoolsPort = Number(process.env.DEVTOOLS_PORT ?? 4800)
-  const dt = await startDevtools(app.agent, { port: devtoolsPort, open: true })
+  const dt = await startDevtools(app.agent, { port: devtoolsPort, open: true, llm: app.llm })
 
   console.log(`\nStello Agent Demo`)
   console.log(`  Model:    ${openaiModel}`)
