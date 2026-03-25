@@ -65,3 +65,8 @@ body {
 .pop-enter {
   animation: popIn 0.15s ease-out;
 }
+
+/* highlight.js 背景色覆盖，匹配设计系统 */
+.hljs {
+  background: #2a2520 !important;
+}
