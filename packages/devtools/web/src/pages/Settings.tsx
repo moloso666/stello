@@ -23,8 +23,9 @@ import {
   Sparkles,
   Eye,
   EyeOff,
+  FileText,
 } from 'lucide-react'
-import { fetchConfig, patchConfig, fetchLLMConfig, patchLLMConfig, type AgentConfig, type HotConfigPatch, type LLMConfig } from '@/lib/api'
+import { fetchConfig, patchConfig, fetchLLMConfig, patchLLMConfig, fetchPrompts, patchPrompts, type AgentConfig, type HotConfigPatch, type LLMConfig, type PromptsConfig } from '@/lib/api'
 
 /** 配置卡片 */
 function Card({ title, icon: Icon, children }: { title: string; icon: React.ElementType; children: React.ReactNode }) {
@@ -246,10 +247,14 @@ export function SettingsPage() {
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [llmConfig, setLlmConfig] = useState<LLMConfig | null>(null)
-  const [llmDraft, setLlmDraft] = useState({ model: '', baseURL: '', apiKey: '' })
+  const [llmDraft, setLlmDraft] = useState({ model: '', baseURL: '', apiKey: '', temperature: 0.7, maxTokens: 1024 })
   const [llmEditing, setLlmEditing] = useState(false)
   const [llmSaving, setLlmSaving] = useState(false)
   const [showApiKey, setShowApiKey] = useState(false)
+  const [promptsConfig, setPromptsConfig] = useState<PromptsConfig | null>(null)
+  const [promptsEditing, setPromptsEditing] = useState(false)
+  const [promptsDraft, setPromptsDraft] = useState({ consolidate: '', integrate: '' })
+  const [promptsSaving, setPromptsSaving] = useState(false)
 
   useEffect(() => {
     fetchConfig()
@@ -260,7 +265,15 @@ export function SettingsPage() {
       .then((cfg) => {
         setLlmConfig(cfg)
         if (cfg.configured) {
-          setLlmDraft({ model: cfg.model ?? '', baseURL: cfg.baseURL ?? '', apiKey: cfg.apiKey ?? '' })
+          setLlmDraft({ model: cfg.model ?? '', baseURL: cfg.baseURL ?? '', apiKey: cfg.apiKey ?? '', temperature: cfg.temperature ?? 0.7, maxTokens: cfg.maxTokens ?? 1024 })
+        }
+      })
+      .catch(() => {})
+    fetchPrompts()
+      .then((cfg) => {
+        setPromptsConfig(cfg)
+        if (cfg.configured) {
+          setPromptsDraft({ consolidate: cfg.consolidate ?? '', integrate: cfg.integrate ?? '' })
         }
       })
       .catch(() => {})
@@ -424,6 +437,30 @@ export function SettingsPage() {
                     </button>
                   </div>
                 </div>
+                <div className="flex items-center gap-3">
+                  <div className="flex-1">
+                    <label className="text-[10px] font-semibold text-text-muted tracking-wide block mb-1">TEMPERATURE</label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      min="0"
+                      max="2"
+                      value={llmDraft.temperature}
+                      onChange={(e) => setLlmDraft((d) => ({ ...d, temperature: parseFloat(e.target.value) || 0 }))}
+                      className="w-full h-7 px-2 text-xs font-mono bg-surface border border-border rounded focus:border-primary focus:outline-none"
+                    />
+                  </div>
+                  <div className="flex-1">
+                    <label className="text-[10px] font-semibold text-text-muted tracking-wide block mb-1">MAX TOKENS</label>
+                    <input
+                      type="number"
+                      min="1"
+                      value={llmDraft.maxTokens}
+                      onChange={(e) => setLlmDraft((d) => ({ ...d, maxTokens: parseInt(e.target.value) || 1024 }))}
+                      className="w-full h-7 px-2 text-xs font-mono bg-surface border border-border rounded focus:border-primary focus:outline-none"
+                    />
+                  </div>
+                </div>
                 <div className="flex items-center gap-2 pt-1">
                   <button
                     onClick={handleLLMSave}
@@ -445,7 +482,7 @@ export function SettingsPage() {
               <>
                 <Row label="Model">
                   <button
-                    onClick={() => { setLlmDraft({ model: llmConfig.model ?? '', baseURL: llmConfig.baseURL ?? '', apiKey: llmConfig.apiKey ?? '' }); setLlmEditing(true) }}
+                    onClick={() => { setLlmDraft({ model: llmConfig.model ?? '', baseURL: llmConfig.baseURL ?? '', apiKey: llmConfig.apiKey ?? '', temperature: llmConfig.temperature ?? 0.7, maxTokens: llmConfig.maxTokens ?? 1024 }); setLlmEditing(true) }}
                     className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium text-text bg-primary/5 hover:bg-primary/15 border border-primary/20 hover:border-primary/40 rounded cursor-pointer transition-colors group"
                   >
                     {llmConfig.model}
@@ -458,6 +495,12 @@ export function SettingsPage() {
                 <Row label="API Key">
                   <span className="text-xs text-text-muted">{llmConfig.apiKey ? '••••••' + llmConfig.apiKey.slice(-4) : '—'}</span>
                 </Row>
+                <Row label="Temperature">
+                  <span className="text-xs font-medium text-text">{llmConfig.temperature ?? '—'}</span>
+                </Row>
+                <Row label="Max Tokens">
+                  <span className="text-xs font-medium text-text">{llmConfig.maxTokens ?? '—'}</span>
+                </Row>
               </>
             )
           ) : (
@@ -465,6 +508,80 @@ export function SettingsPage() {
               <Info size={12} className="text-warning shrink-0" />
               <p className="text-[10px] text-text-muted">
                 Pass <code className="text-[10px] font-mono text-primary-dark">llm</code> option to <code className="text-[10px] font-mono text-primary-dark">startDevtools()</code> to enable LLM switching.
+              </p>
+            </div>
+          )}
+        </Card>
+
+        {/* Consolidation / Integration Prompts */}
+        <Card title="Consolidation / Integration Prompts" icon={FileText}>
+          {promptsConfig?.configured ? (
+            promptsEditing ? (
+              <div className="space-y-3">
+                <div>
+                  <label className="text-[10px] font-semibold text-text-muted tracking-wide block mb-1">CONSOLIDATE PROMPT (L3→L2)</label>
+                  <textarea
+                    value={promptsDraft.consolidate}
+                    onChange={(e) => setPromptsDraft((d) => ({ ...d, consolidate: e.target.value }))}
+                    className="w-full h-28 px-2 py-1.5 text-[11px] font-mono bg-surface border border-border rounded-lg focus:border-primary focus:outline-none resize-y leading-relaxed"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-semibold text-text-muted tracking-wide block mb-1">INTEGRATE PROMPT (L2→synthesis+insights)</label>
+                  <textarea
+                    value={promptsDraft.integrate}
+                    onChange={(e) => setPromptsDraft((d) => ({ ...d, integrate: e.target.value }))}
+                    className="w-full h-28 px-2 py-1.5 text-[11px] font-mono bg-surface border border-border rounded-lg focus:border-primary focus:outline-none resize-y leading-relaxed"
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={async () => {
+                      setPromptsSaving(true)
+                      try {
+                        const result = await patchPrompts(promptsDraft)
+                        setPromptsConfig(result)
+                        setPromptsEditing(false)
+                      } catch { /* ignore */ }
+                      setPromptsSaving(false)
+                    }}
+                    disabled={promptsSaving}
+                    className="flex items-center gap-1 px-3 py-1.5 text-[11px] font-medium bg-primary text-white rounded hover:bg-primary-dark disabled:opacity-50 transition-colors"
+                  >
+                    {promptsSaving ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}
+                    Apply
+                  </button>
+                  <button
+                    onClick={() => setPromptsEditing(false)}
+                    className="px-3 py-1.5 text-[11px] font-medium text-text-muted hover:text-text transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-3 group relative">
+                <div>
+                  <p className="text-[10px] font-semibold text-text-muted tracking-wide mb-1">CONSOLIDATE</p>
+                  <p className="text-[11px] text-text-secondary leading-relaxed line-clamp-3">{promptsConfig.consolidate}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] font-semibold text-text-muted tracking-wide mb-1">INTEGRATE</p>
+                  <p className="text-[11px] text-text-secondary leading-relaxed line-clamp-3">{promptsConfig.integrate}</p>
+                </div>
+                <button
+                  onClick={() => { setPromptsDraft({ consolidate: promptsConfig.consolidate ?? '', integrate: promptsConfig.integrate ?? '' }); setPromptsEditing(true) }}
+                  className="absolute top-0 right-0 opacity-0 group-hover:opacity-100 p-1 bg-surface rounded border border-border hover:border-primary transition-all"
+                >
+                  <Pencil size={10} className="text-text-muted hover:text-primary" />
+                </button>
+              </div>
+            )
+          ) : (
+            <div className="flex items-center gap-2 px-3 py-2 bg-warning/5 rounded-lg border border-warning/15">
+              <Info size={12} className="text-warning shrink-0" />
+              <p className="text-[10px] text-text-muted">
+                Pass <code className="text-[10px] font-mono text-primary-dark">prompts</code> option to <code className="text-[10px] font-mono text-primary-dark">startDevtools()</code> to enable prompt editing.
               </p>
             </div>
           )}

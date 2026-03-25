@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
 import type { StelloAgent, StelloAgentHotConfig } from '@stello-ai/core'
-import type { LLMConfigProvider } from './types.js'
+import type { LLMConfigProvider, PromptProvider, SessionAccessProvider } from './types.js'
 
 /** 全局错误处理 */
 function withErrorHandler(app: Hono): void {
@@ -75,6 +75,8 @@ export function createRoutes(
   onEvent?: (event: { type: string; sessionId?: string; data?: Record<string, unknown> }) => void,
   getEventHistory?: () => Array<{ type: string; sessionId?: string; timestamp: string; data?: Record<string, unknown> }>,
   llmProvider?: LLMConfigProvider,
+  promptProvider?: PromptProvider,
+  sessionAccessProvider?: SessionAccessProvider,
 ): Hono {
   const app = new Hono()
   withErrorHandler(app)
@@ -321,6 +323,40 @@ export function createRoutes(
     })
     onEvent?.({ type: 'llm.updated', data: { model: body.model, baseURL: body.baseURL } })
     return c.json({ ok: true, ...llmProvider.getConfig() })
+  })
+
+  /** 获取 Consolidation/Integration 提示词 */
+  app.get('/prompts', (c) => {
+    if (!promptProvider) return c.json({ configured: false })
+    return c.json({ configured: true, ...promptProvider.getPrompts() })
+  })
+
+  /** 更新 Consolidation/Integration 提示词 */
+  app.patch('/prompts', async (c) => {
+    if (!promptProvider) return c.json({ error: 'Prompt provider not configured' }, 400)
+    const body = await c.req.json<{ consolidate?: string; integrate?: string }>()
+    promptProvider.setPrompts(body)
+    onEvent?.({ type: 'prompts.updated' })
+    return c.json({ ok: true, ...promptProvider.getPrompts() })
+  })
+
+  /** 获取 session 的 system prompt */
+  app.get('/sessions/:id/system-prompt', async (c) => {
+    if (!sessionAccessProvider) return c.json({ configured: false, content: null })
+    const id = c.req.param('id')
+    const content = await sessionAccessProvider.getSystemPrompt(id)
+    return c.json({ configured: true, content })
+  })
+
+  /** 更新 session 的 system prompt */
+  app.put('/sessions/:id/system-prompt', async (c) => {
+    if (!sessionAccessProvider) return c.json({ error: 'Session access not configured' }, 400)
+    const id = c.req.param('id')
+    const { content } = await c.req.json<{ content: string }>()
+    if (typeof content !== 'string') return c.json({ error: 'content must be a string' }, 400)
+    await sessionAccessProvider.setSystemPrompt(id, content)
+    onEvent?.({ type: 'system-prompt.updated', sessionId: id })
+    return c.json({ ok: true })
   })
 
   /** 获取事件历史 */

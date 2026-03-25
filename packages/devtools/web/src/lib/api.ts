@@ -180,6 +180,8 @@ export interface LLMConfig {
   model?: string
   baseURL?: string
   apiKey?: string
+  temperature?: number
+  maxTokens?: number
 }
 
 /** 获取当前 LLM 配置 */
@@ -188,9 +190,42 @@ export function fetchLLMConfig() {
 }
 
 /** 切换 LLM 配置 */
-export function patchLLMConfig(config: { model?: string; baseURL?: string; apiKey?: string }) {
+export function patchLLMConfig(config: { model?: string; baseURL?: string; apiKey?: string; temperature?: number; maxTokens?: number }) {
   return request<LLMConfig & { ok: boolean }>('/llm', {
     method: 'PATCH',
     body: JSON.stringify(config),
+  })
+}
+
+/** 提示词配置 */
+export interface PromptsConfig {
+  configured: boolean
+  consolidate?: string
+  integrate?: string
+}
+
+/** 获取 Consolidation/Integration 提示词 */
+export function fetchPrompts() {
+  return request<PromptsConfig>('/prompts')
+}
+
+/** 更新提示词 */
+export function patchPrompts(prompts: { consolidate?: string; integrate?: string }) {
+  return request<PromptsConfig & { ok: boolean }>('/prompts', {
+    method: 'PATCH',
+    body: JSON.stringify(prompts),
+  })
+}
+
+/** 获取 session 的 system prompt */
+export function fetchSystemPrompt(sessionId: string) {
+  return request<{ configured: boolean; content: string | null }>(`/sessions/${sessionId}/system-prompt`)
+}
+
+/** 更新 session 的 system prompt */
+export function updateSystemPrompt(sessionId: string, content: string) {
+  return request<{ ok: boolean }>(`/sessions/${sessionId}/system-prompt`, {
+    method: 'PUT',
+    body: JSON.stringify({ content }),
   })
 }

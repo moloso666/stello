@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { ChevronDown, ChevronRight, Pencil, ArrowDownRight, Loader2, Search, Filter } from 'lucide-react'
-import { fetchSessions, fetchSessionDetail, type SessionMeta, type SessionDetail } from '@/lib/api'
+import { ChevronDown, ChevronRight, Pencil, ArrowDownRight, Loader2, Search, Filter, Save } from 'lucide-react'
+import { fetchSessions, fetchSessionDetail, fetchSystemPrompt, updateSystemPrompt, type SessionMeta, type SessionDetail } from '@/lib/api'
 
 /** 角色 badge */
 function RoleBadge({ role }: { role: string }) {
@@ -109,6 +109,11 @@ export function Inspector() {
   const [dropdownOpen, setDropdownOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [roleFilter, setRoleFilter] = useState<'all' | 'user' | 'assistant' | 'system'>('all')
+  const [sysPrompt, setSysPrompt] = useState<string | null>(null)
+  const [sysPromptConfigured, setSysPromptConfigured] = useState(false)
+  const [sysPromptEditing, setSysPromptEditing] = useState(false)
+  const [sysPromptDraft, setSysPromptDraft] = useState('')
+  const [sysPromptSaving, setSysPromptSaving] = useState(false)
 
   /* 拉取 session 列表 */
   useEffect(() => {
@@ -122,14 +127,18 @@ export function Inspector() {
       .finally(() => setLoading(false))
   }, [])
 
-  /* 选中 session 变化时拉取详情 */
+  /* 选中 session 变化时拉取详情 + system prompt */
   useEffect(() => {
     if (!selectedId) return
     setLoading(true)
+    setSysPromptEditing(false)
     fetchSessionDetail(selectedId)
       .then(setDetail)
       .catch(() => setDetail(null))
       .finally(() => setLoading(false))
+    fetchSystemPrompt(selectedId)
+      .then((r) => { setSysPromptConfigured(r.configured); setSysPrompt(r.content) })
+      .catch(() => { setSysPromptConfigured(false); setSysPrompt(null) })
   }, [selectedId])
 
   const selectedNode = sessions.find((s) => s.id === selectedId)
@@ -288,10 +297,59 @@ export function Inspector() {
 
               {/* System Prompt */}
               <DataCard title="System Prompt">
-                <p className="text-[11px] text-text-secondary leading-relaxed">
-                  {/* system prompt 从 config 读 */}
-                  Available via Settings page
-                </p>
+                {sysPromptConfigured ? (
+                  sysPromptEditing ? (
+                    <div className="space-y-2">
+                      <textarea
+                        value={sysPromptDraft}
+                        onChange={(e) => setSysPromptDraft(e.target.value)}
+                        className="w-full h-32 px-2 py-1.5 text-[11px] font-mono bg-surface border border-border rounded-lg focus:border-primary focus:outline-none resize-y leading-relaxed"
+                      />
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={async () => {
+                            if (!selectedId) return
+                            setSysPromptSaving(true)
+                            try {
+                              await updateSystemPrompt(selectedId, sysPromptDraft)
+                              setSysPrompt(sysPromptDraft)
+                              setSysPromptEditing(false)
+                            } catch { /* ignore */ }
+                            setSysPromptSaving(false)
+                          }}
+                          disabled={sysPromptSaving}
+                          className="flex items-center gap-1 px-2 py-1 text-[10px] font-medium bg-primary text-white rounded hover:bg-primary-dark disabled:opacity-50 transition-colors"
+                        >
+                          {sysPromptSaving ? <Loader2 size={10} className="animate-spin" /> : <Save size={10} />}
+                          Save
+                        </button>
+                        <button
+                          onClick={() => setSysPromptEditing(false)}
+                          className="px-2 py-1 text-[10px] font-medium text-text-muted hover:text-text transition-colors"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="group relative">
+                      <p className="text-[11px] text-text-secondary leading-relaxed whitespace-pre-wrap">
+                        {sysPrompt ?? <span className="italic text-text-muted">Empty</span>}
+                      </p>
+                      <button
+                        onClick={() => { setSysPromptDraft(sysPrompt ?? ''); setSysPromptEditing(true) }}
+                        className="absolute top-0 right-0 opacity-0 group-hover:opacity-100 p-1 bg-surface rounded border border-border hover:border-primary transition-all"
+                        title="Edit system prompt"
+                      >
+                        <Pencil size={10} className="text-text-muted hover:text-primary" />
+                      </button>
+                    </div>
+                  )
+                ) : (
+                  <p className="text-[11px] text-text-muted italic">
+                    Pass sessionAccess to startDevtools() to enable
+                  </p>
+                )}
               </DataCard>
 
               {/* Session Meta */}
