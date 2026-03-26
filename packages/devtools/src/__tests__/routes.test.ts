@@ -171,6 +171,7 @@ describe('devtools REST routes', () => {
     const agent = createMockAgent()
     const sessionAccess = {
       getSystemPrompt: vi.fn().mockResolvedValue(null),
+      setSystemPrompt: vi.fn().mockResolvedValue(undefined),
       getScope: vi.fn().mockResolvedValue('live insight'),
     }
     const app = new Hono()
