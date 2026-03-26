@@ -1,15 +1,15 @@
 <p align="right">
-  <a href="#english">English</a> | <a href="./README_CN.md">中文</a>
+  <a href="./README_EN.md">English</a> | <a href="#中文">中文</a>
 </p>
 
-<a id="english"></a>
+<a id="中文"></a>
 
 <div align="center">
   <img src="./stello_logo.svg" alt="Stello" width="200">
 
   <h1>Stello</h1>
 
-  <p><strong>Your thinking branches. Tools flatten it.</strong></p>
+  <p><strong>你的思维在分叉。工具把它压扁了。</strong></p>
 
   <p>
     <a href="https://www.npmjs.com/package/@stello-ai/core"><img src="https://img.shields.io/npm/v/@stello-ai/core.svg" alt="npm version"></a>
@@ -19,72 +19,72 @@
 
 <br/>
 
-You talk with AI about product design, then drift into tech stack choices, hiring needs, and back to fundraising. Two hours later, you close the window—no structure left behind.
+你跟 AI 聊产品设计，聊着聊着扯到技术选型，又扯到招聘需求，又回到融资节奏。两个小时后关掉窗口——什么结构都没留下。
 
-**All thinking compressed into a single line.**
+**所有思考被压进一条直线。**
 
-Your brain juggles five directions at once, but tools give you a single-threaded window. ChatGPT, Claude, Gemini—all the same.
+你的大脑在同时推进五个方向，但工具只给你一个单线程窗口。ChatGPT、Claude、Gemini——全部一样。
 
-**It's not the model. It's the container.**
-
----
-
-**Stello** is the first conversation topology system.
-
-Conversations auto-split into tree-structured sessions. Each branch dives deep independently. Insights flow across branches. The entire topology renders as an interactive star map.
-
-Thinking finally has shape.
+**不是模型不够强，是对话的容器太原始。**
 
 ---
 
-## ✨ Core Capabilities
+**Stello** 是首个对话拓扑系统。
 
-- 🌳 **Auto-splitting Conversations** — AI detects topic branches and creates child sessions via tool calling, each with clear scope
-- 🧠 **Three-layer Memory** — L3 raw records / L2 skill descriptions / L1 global cognition, memory flows between layers
-- 🔄 **Global Synthesis** — Main Session collects all L2s from child sessions, generates synthesis and pushes insights
-- ⚡️ **Zero Overhead in Dialogue** — All memory consolidation executes async (fire-and-forget), never blocks conversation flow
-- 🎨 **Star Map Visualization** — Each star is a thought direction, connections show relationships, size maps depth, brightness maps activity
-- 🔌 **Fully Decoupled Architecture** — No LLM lock-in / storage lock-in / UI lock-in, Session and Topology are separate
+对话自动分裂为树状 Session，每个方向独立深入。跨分支传递洞察。整个拓扑渲染为可交互星空图。
+
+思考第一次有了形状。
 
 ---
 
-## 🚀 Quick Start
+## ✨ 核心能力
 
-### Installation
+- 🌳 **对话自动分裂** — AI 识别话题分叉时通过工具调用创建子 Session，每个分支有明确 scope
+- 🧠 **三层分级记忆** — L3 原始对话 / L2 技能描述 / L1 全局认知，记忆在层级间流动
+- 🔄 **全局意识整合** — Main Session 收集所有子 Session 的 L2，生成 synthesis 并推送 insights
+- ⚡️ **对话中零开销** — 所有记忆提炼异步执行（fire-and-forget），不阻塞对话流程
+- 🎨 **星空图可视化** — 每颗星是一个思考方向，连线是关联，大小映射深度，亮度映射活跃度
+- 🔌 **完全解耦架构** — 不绑定 LLM / 存储 / UI，Session 与 Topology 分离
+
+---
+
+## 🚀 快速开始
+
+### 安装
 
 ```bash
 npm install @stello-ai/core @stello-ai/session
-# or
+# 或
 pnpm add @stello-ai/core @stello-ai/session
 
-# For development debugging
+# 开发调试时安装
 pnpm add -D @stello-ai/devtools
 ```
 
-### 30-Second Example
+### 30 秒示例
 
 ```typescript
 import { createStelloAgent } from '@stello-ai/core'
 import { FileSystemStorageAdapter } from '@stello-ai/core/adapters'
 
-// Create Agent
+// 创建 Agent
 const agent = await createStelloAgent({
-  sessions: /* SessionTree implementation */,
-  memory: /* MemoryEngine implementation */,
+  sessions: /* SessionTree 实现 */,
+  memory: /* MemoryEngine 实现 */,
   session: {
     llm: yourLLMAdapter,
-    sessionResolver: async (id) => /* return Session instance */,
+    sessionResolver: async (id) => /* 返回 Session 实例 */,
   },
 })
 
-// Start conversation
-const result = await agent.turn('main-session-id', 'Help me plan a startup')
+// 开始对话
+const result = await agent.turn('main-session-id', '帮我规划一个创业项目')
 
-// AI auto-detects topic branches, creates child sessions
-// Dive deep in different branches, Main Session maintains global view
+// AI 自动识别话题分叉，创建子 Session
+// 你在不同分支深入，Main Session 保持全局视野
 ```
 
-### Launch Visual Debugger
+### 启动可视化调试
 
 ```typescript
 import { startDevtools } from '@stello-ai/devtools'
@@ -94,140 +94,140 @@ await startDevtools(agent, {
   open: true
 })
 
-// Browser opens automatically at http://localhost:4800
-// See star map + conversation panels + live event streams
+// 浏览器自动打开 http://localhost:4800
+// 看到星空图 + 对话面板 + 实时事件流
 ```
 
 ---
 
-## 📦 Packages
+## 📦 包说明
 
 ### @stello-ai/session
 
-**Standalone conversation unit**, minimal three-layer memory implementation.
+**独立对话单元**，三层记忆的最小实现。
 
-- ✅ Single LLM calls (send / stream)
-- ✅ L3 conversation record persistence
-- ✅ L2 skill description generation (consolidate)
-- ✅ Fully decoupled from tree structure
-- ✅ Streaming output and tool calling support
+- ✅ 单次 LLM 调用（send / stream）
+- ✅ L3 对话记录持久化
+- ✅ L2 技能描述生成（consolidate）
+- ✅ 与树结构完全解耦
+- ✅ 支持流式输出和工具调用
 
-**Use for:** Simple scenarios needing single conversation + memory
+**适合：** 只需要单个对话 + 记忆的简单场景
 
 ---
 
 ### @stello-ai/core
 
-**Orchestration engine**, session tree scheduler.
+**编排引擎**，Session 树的调度层。
 
-- ✅ Tool call loops (turn)
-- ✅ Consolidation / Integration scheduling
-- ✅ Main Session global consciousness
-- ✅ Session tree management (fork / archive / refs)
-- ✅ Split protection and policy configuration
-- ✅ Lifecycle hooks and event system
+- ✅ 工具调用循环（turn）
+- ✅ Consolidation / Integration 调度
+- ✅ Main Session 全局意识
+- ✅ Session 树管理（fork / archive / refs）
+- ✅ 分叉保护和策略配置
+- ✅ Lifecycle hooks 和事件系统
 
-**Use for:** Complex apps needing multi-branch dialogue + global synthesis
+**适合：** 构建需要多分支对话 + 全局整合的复杂应用
 
 ---
 
 ### @stello-ai/server
 
-**Service layer**, PostgreSQL + HTTP/WebSocket.
+**服务化层**，PostgreSQL + HTTP/WebSocket。
 
-- ✅ REST + WebSocket dual channels
-- ✅ PostgreSQL persistence (7 tables)
-- ✅ Multi-tenant Space management
-- ✅ AgentPool lazy-loading + auto-eviction
-- ✅ Per-session prompt 3-tier fallback
-- ✅ Out-of-box Docker Compose
+- ✅ REST + WebSocket 双通道
+- ✅ PostgreSQL 持久化（7 张表）
+- ✅ 多租户 Space 管理
+- ✅ AgentPool 懒加载 + 自动回收
+- ✅ Per-session prompt 三级 fallback
+- ✅ 开箱即用的 Docker Compose
 
-**Use for:** Production deployments + multi-user isolation for SaaS apps
+**适合：** 需要生产级部署 + 多用户隔离的 SaaS 应用
 
 ---
 
 ### @stello-ai/devtools
 
-**Development debugger**, star map + live panels.
+**开发调试工具**，星空图 + 实时面板。
 
-- ✅ Interactive star map (drag / zoom)
-- ✅ Conversation panel + file browser
-- ✅ Real-time event monitoring
-- ✅ Apple Liquid Glass visual style
-- ✅ One-line integration
+- ✅ 交互式星空图（拖拽 / 缩放）
+- ✅ 对话面板 + 文件浏览器
+- ✅ 实时事件监控
+- ✅ Apple Liquid Glass 视觉风格
+- ✅ 一行代码接入
 
-**Use for:** Development debugging (not production dependency)
+**适合：** 开发阶段可视化调试（非生产依赖）
 
 ---
 
-## 🎯 Core Concepts
+## 🎯 核心概念
 
-### The Skill Metaphor
+### 技能隐喻
 
-Each child session is a **skill**. Main Session is the **skill orchestrator**.
+每个子 Session 是一个**技能**，Main Session 是**技能调用方**。
 
 ```
-Child Session = Skill
-  L3 = Skill's detailed knowledge base (internal consumption)
-  L2 = Skill's description (external interface, Main Session consumes)
+子 Session = 技能
+  L3 = 技能的详细知识体（内部消费）
+  L2 = 技能的 description（外部接口，Main Session 消费）
 
-Main Session = Orchestrator
-  synthesis = Synthesized cognition of all L2s
-  insights = Targeted suggestions pushed to each child session
+Main Session = 调用方
+  synthesis = 对所有 L2 的综合认知
+  insights = 定向推送给各子 Session 的建议
 ```
 
-**Core Constraints:**
-- L2 invisible to child session itself — L2 is external description, not self-use memory
-- Main Session only reads L2, never reads child session's L3
-- Child sessions completely isolated, only cross-branch info source is Main Session's pushed insights
+**核心约束：**
+- L2 对子 Session 自身不可见 — L2 是外部描述，不是自用记忆
+- Main Session 只读 L2，不读子 Session 的 L3
+- 子 Session 之间完全隔离，唯一的跨分支信息来源是 Main Session 推送的 insights
 
 ---
 
-### Three-layer Memory
+### 三层记忆
 
-| Layer | Content | Consumer |
-|-------|---------|----------|
-| **L3** | Raw conversation records | The session's own LLM |
-| **L2** | Skill description (external view) | Main Session (via integration) |
-| **L1** | Global key-value + synthesis | Application layer direct access |
+| 层 | 内容 | 消费者 |
+|----|------|--------|
+| **L3** | 原始对话记录 | 该 Session 自身的 LLM |
+| **L2** | 技能描述（外部视角） | Main Session（通过 integration） |
+| **L1** | 全局键值 + synthesis | 应用层直接读写 |
 
-**Memory Flow:**
-- **Upward Reporting** — L3 → L2 → Main Session index
-- **Downward Push** — Main Session insights → Child Sessions
-- **Horizontal Isolation** — No direct communication between child sessions
-
----
-
-## 💡 Use Cases
-
-- **Deep Consulting** — Legal, medical, financial multi-dimensional analysis, avoid information pollution
-- **Knowledge Exploration** — Learning, researching multiple topics in parallel, auto-build knowledge maps
-- **Goal Decomposition** — Startup planning, project management, OKR execution with hierarchical tasks
-- **System Building** — Course systems, knowledge systems, product architecture with layered design
-- **Creative Production** — Content, design exploring multiple approaches in parallel, maintain global consistency
-- **Office Collaboration** — Multi-task coordination, AI discovers omissions and cross-task dependencies
-
-For scenarios needing **simultaneous multi-directional progress + global oversight**.
+**记忆流动：**
+- **向上汇报** — L3 → L2 → Main Session index
+- **向下推送** — Main Session insights → 子 Session
+- **横向隔离** — 子 Session 之间无直接通信
 
 ---
 
-## 📚 Documentation
+## 💡 适合场景
 
-- 📖 **Complete Guide** — _Coming Soon_
-- 🎯 **Core Concepts** — _Coming Soon_
-- 📦 **API Reference** — _Coming Soon_
-- 💡 **Examples** — _Coming Soon_
-- 🏗️ **Architecture** — _Coming Soon_
-- 💬 **Community** — _Coming Soon_
+- **深度咨询** — 法律、医疗、财务等多维度分析，避免信息污染
+- **知识探索** — 学习、研究多个主题并行，自动构建知识地图
+- **目标分解** — 创业规划、项目管理、OKR 落地等层级任务
+- **体系构建** — 课程体系、知识体系、产品架构等层级设计
+- **创意创作** — 内容、设计多方案并行探索，保持全局一致性
+- **办公协作** — 多任务统筹，AI 发现遗漏和跨任务依赖
 
----
-
-## 🤝 Contributing
-
-Contributions welcome! See [CONTRIBUTING.md](./CONTRIBUTING.md)
+适合需要**同时推进多个方向 + 保持全局视野**的复杂场景。
 
 ---
 
-## 📄 License
+## 📚 文档
+
+- 📖 **完整教程** — _即将上线_
+- 🎯 **核心概念** — _即将上线_
+- 📦 **API 参考** — _即将上线_
+- 💡 **示例代码** — _即将上线_
+- 🏗️ **架构设计** — _即将上线_
+- 💬 **社区讨论** — _即将开放_
+
+---
+
+## 🤝 贡献
+
+欢迎贡献！详见 [CONTRIBUTING.md](./CONTRIBUTING.md)
+
+---
+
+## 📄 许可证
 
 Apache-2.0 © [Stello Team](https://github.com/stello-agent)
