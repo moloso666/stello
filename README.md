@@ -109,6 +109,10 @@ await startDevtools(agent, {
 
 ## 📦 包说明
 
+<table>
+<tr>
+<td width="50%" valign="top">
+
 ### @stello-ai/session
 
 **独立对话单元**，三层记忆的最小实现。
@@ -121,7 +125,8 @@ await startDevtools(agent, {
 
 **适合：** 只需要单个对话 + 记忆的简单场景
 
----
+</td>
+<td width="50%" valign="top">
 
 ### @stello-ai/core
 
@@ -136,7 +141,10 @@ await startDevtools(agent, {
 
 **适合：** 构建需要多分支对话 + 全局整合的复杂应用
 
----
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
 
 ### @stello-ai/server
 
@@ -151,7 +159,8 @@ await startDevtools(agent, {
 
 **适合：** 需要生产级部署 + 多用户隔离的 SaaS 应用
 
----
+</td>
+<td width="50%" valign="top">
 
 ### @stello-ai/devtools
 
@@ -164,6 +173,10 @@ await startDevtools(agent, {
 - ✅ 一行代码接入
 
 **适合：** 开发阶段可视化调试（非生产依赖）
+
+</td>
+</tr>
+</table>
 
 ---
 

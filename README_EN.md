@@ -109,6 +109,10 @@ await startDevtools(agent, {
 
 ## 📦 Packages
 
+<table>
+<tr>
+<td width="50%" valign="top">
+
 ### @stello-ai/session
 
 **Standalone conversation unit**, minimal three-layer memory implementation.
@@ -121,7 +125,8 @@ await startDevtools(agent, {
 
 **Use for:** Simple scenarios needing single conversation + memory
 
----
+</td>
+<td width="50%" valign="top">
 
 ### @stello-ai/core
 
@@ -136,7 +141,10 @@ await startDevtools(agent, {
 
 **Use for:** Complex apps needing multi-branch dialogue + global synthesis
 
----
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
 
 ### @stello-ai/server
 
@@ -151,7 +159,8 @@ await startDevtools(agent, {
 
 **Use for:** Production deployments + multi-user isolation for SaaS apps
 
----
+</td>
+<td width="50%" valign="top">
 
 ### @stello-ai/devtools
 
@@ -164,6 +173,10 @@ await startDevtools(agent, {
 - ✅ One-line integration
 
 **Use for:** Development debugging (not production dependency)
+
+</td>
+</tr>
+</table>
 
 ---
 
