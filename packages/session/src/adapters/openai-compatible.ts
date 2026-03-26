@@ -1,4 +1,6 @@
 import OpenAI from 'openai'
+import type { ChatCompletion, ChatCompletionChunk } from 'openai/resources/chat/completions'
+import type { Stream } from 'openai/streaming'
 import type { LLMAdapter, LLMResult, Message, LLMCompleteOptions } from '../types/llm.js'
 
 /** OpenAI 兼容协议的配置选项 */
@@ -47,7 +49,8 @@ export function createOpenAICompatibleAdapter(options: OpenAICompatibleOptions):
       const response = await client.chat.completions.create({
         ...buildParams(messages, completeOptions),
         ...(options.extraBody ?? {}),
-      } as Parameters<typeof client.chat.completions.create>[0])
+        stream: false,
+      } as Parameters<typeof client.chat.completions.create>[0]) as ChatCompletion
 
       const choice = response.choices[0]
 
@@ -74,11 +77,11 @@ export function createOpenAICompatibleAdapter(options: OpenAICompatibleOptions):
         ...buildParams(messages, completeOptions),
         ...(options.extraBody ?? {}),
         stream: true,
-      } as Parameters<typeof client.chat.completions.create>[0])
+      } as Parameters<typeof client.chat.completions.create>[0]) as Stream<ChatCompletionChunk>
 
       for await (const chunk of stream) {
         const delta = chunk.choices[0]?.delta?.content ?? ''
-        const toolCallDeltas = (chunk.choices[0]?.delta?.tool_calls ?? []).map((call) => ({
+        const toolCallDeltas = (chunk.choices[0]?.delta?.tool_calls ?? []).map((call: any) => ({
           index: call.index ?? 0,
           id: call.id,
           name: call.function?.name,

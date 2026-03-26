@@ -142,6 +142,10 @@ function buildMainSession(
         const now = new Date().toISOString()
         messages.push({ role: 'user', content, timestamp: now })
 
+        if (!options.llm) {
+          throw new Error('LLM adapter not set. Call setLLM() first or pass llm to createMainSession().')
+        }
+
         let result: SendResult
         if (options.llm.stream) {
           let accumulated = ''
