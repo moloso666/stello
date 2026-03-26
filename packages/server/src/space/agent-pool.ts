@@ -16,6 +16,8 @@ import type { Space } from '../types.js'
 import {
   createDefaultConsolidateFn,
   createDefaultIntegrateFn,
+  DEFAULT_CONSOLIDATE_PROMPT,
+  DEFAULT_INTEGRATE_PROMPT,
   type LLMCallFn,
 } from '../llm/defaults.js'
 
@@ -128,7 +130,7 @@ export class AgentPool {
           resolve: async (sessionId: string) => {
             const session = await sessionResolver(sessionId)
             const consolidateFn = createDefaultConsolidateFn(
-              sessionId, space.consolidatePrompt, llm, this.pool, spaceId,
+              space.consolidatePrompt ?? DEFAULT_CONSOLIDATE_PROMPT, llm,
             )
             return adaptSessionToEngineRuntime(session, { consolidateFn, serializeResult })
           },
@@ -148,7 +150,7 @@ export class AgentPool {
               const mainSession = await mainSessionResolver()
               if (!mainSession) return
               const integrateFn = createDefaultIntegrateFn(
-                mainSessionId, space.integratePrompt, llm, ctx.pool, spaceId,
+                space.integratePrompt ?? DEFAULT_INTEGRATE_PROMPT, llm,
               )
               const adapted = adaptMainSessionToSchedulerMainSession(mainSession, { integrateFn })
               await adapted.integrate()

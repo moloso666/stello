@@ -238,6 +238,7 @@ export class PgSessionTree implements SessionTree {
         id: row['id'] as string,
         label: row['label'] as string,
         status: row['status'] as 'active' | 'archived',
+        turnCount: (row['turn_count'] as number) ?? 0,
         children: [],
       }
       nodeMap.set(node.id, node)
