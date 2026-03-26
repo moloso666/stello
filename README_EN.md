@@ -9,7 +9,8 @@
 
   <h1>Stello</h1>
 
-  <p><strong>Your thinking branches. Tools flatten it.</strong></p>
+  <p><strong>Think AI-Native. Know the World AI-Native.</strong></p>
+  <p>Your thinking is branching and growing—don't let linear chat limit it!</p>
 
   <p>
     <a href="https://www.npmjs.com/package/@stello-ai/core"><img src="https://img.shields.io/npm/v/@stello-ai/core.svg" alt="npm version"></a>
@@ -19,21 +20,27 @@
 
 <br/>
 
-You talk with AI about product design, then drift into tech stack choices, hiring needs, and back to fundraising. Two hours later, you close the window—no structure left behind.
+## 🤔 What Problem Does Stello Solve?
 
-**All thinking compressed into a single line.**
+Ever feel your AI conversations trapped in a single thread? Your thinking diverges, branching in multiple directions, weaving together—but the dialogue keeps growing, context tightens, and response quality quietly degrades. Two hours later you close the window—no structure remains. Days later you want to continue, but can't even recall where you left off.
 
-Your brain juggles five directions at once, but tools give you a single-threaded window. ChatGPT, Claude, Gemini—all the same.
+**It's not the model—it's how you collaborate with AI that's primitive!**
 
-**It's not the model. It's the container.**
+Your thinking is branching and evolving, yet AI interacts with you linearly through a scrolling window!
 
----
+Stello explodes that line into a network! Stello builds a new collaboration paradigm between humans and AI, where every conversation constructs a self-aware, growing cognitive topology.
 
-**Stello** is the first conversation topology system.
+**You and AI, co-evolving in Stello.**
 
-Conversations auto-split into tree-structured sessions. Each branch dives deep independently. Insights flow across branches. The entire topology renders as an interactive star map.
+<br/>
 
-Thinking finally has shape.
+## 💡 What is Stello?
+
+**The first AI-Native cognitive topology system.**
+
+Stello is an open-source conversation topology engine for AI Agent and AI application developers. It provides four core capabilities: auto-splitting conversations, three-layer hierarchical memory, global consciousness integration, and topology visualization.
+
+Conversations auto-split into independent Sessions by semantics, forming tree-structured topologies. The three-layer memory system inherits hierarchically across Sessions. The global consciousness layer (Main Session) perceives conflicts and dependencies across all branches, pushing targeted insights. The entire cognitive topology renders as a growable, conversable star-node graph.
 
 ---
 
