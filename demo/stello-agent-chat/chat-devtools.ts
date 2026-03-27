@@ -4,7 +4,6 @@ import {
   SessionTreeImpl,
   SkillRouterImpl,
   Scheduler,
-  SplitGuard,
   createStelloAgent,
   type ConfirmProtocol,
   type CoreSchema,
@@ -502,14 +501,12 @@ async function bootstrap() {
     },
   }
 
-  // ─── Scheduler + SplitGuard ───
+  // ─── Scheduler ───
 
   const scheduler = new Scheduler({
     consolidation: { trigger: 'everyNTurns', everyNTurns: 3 },
     integration: { trigger: 'afterConsolidate' },
   })
-
-  const splitGuard = new SplitGuard(sessions, { minTurns: 2, cooldownTurns: 3 })
 
   // ─── Agent Config ───
 
@@ -533,10 +530,9 @@ async function bootstrap() {
       sessionResolver: async (sessionId) => {
         const entry = sessionMap.get(sessionId)
         if (!entry) throw new Error(`Unknown session: ${sessionId}`)
-        if ('main' in entry && entry.main) {
-          throw new Error('Main session is not available through sessionResolver')
-        }
-        return wrapSession(sessionId, entry.session, memory)
+        /* main session 也需要可解析，fork 路由到 root 时会用到 */
+        const session = 'main' in entry && entry.main ? entry.main : entry.session
+        return wrapSession(sessionId, session as Session, memory)
       },
       mainSessionResolver: async () => ({
         async integrate(fn: Parameters<typeof mainSession.integrate>[0]) {
@@ -568,7 +564,6 @@ async function bootstrap() {
     },
     orchestration: {
       scheduler,
-      splitGuard,
       hooks: {
         onRoundStart({ sessionId }) { currentToolSessionId = sessionId },
         onRoundEnd({ sessionId, input, turn }) {
