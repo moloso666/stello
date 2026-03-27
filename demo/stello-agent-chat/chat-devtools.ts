@@ -38,7 +38,7 @@ const host = process.env.DEMO_HOST ?? '127.0.0.1'
 
 const openaiApiKey = process.env.OPENAI_API_KEY
 const openaiBaseURL = process.env.OPENAI_BASE_URL ?? 'https://api.minimaxi.com/v1'
-const openaiModel = process.env.OPENAI_MODEL ?? 'MiniMax-M1'
+const openaiModel = process.env.OPENAI_MODEL ?? 'MiniMax-M2.7'
 
 if (!openaiApiKey) {
   console.error('Missing OPENAI_API_KEY')
@@ -349,6 +349,8 @@ async function bootstrap() {
 
   let currentConsolidatePrompt = CONSOLIDATE_PROMPT
   let currentIntegratePrompt = INTEGRATE_PROMPT
+  const perSessionConsolidatePrompt = new Map<string, string>()
+  const perSessionIntegratePrompt = new Map<string, string>()
   const disabledTools = new Set<string>()
   const disabledSkills = new Set<string>()
   const baseSkillRouter = new SkillRouterImpl()
@@ -597,6 +599,18 @@ async function bootstrap() {
         if (!entry) return
         const s = 'main' in entry && entry.main ? entry.main : entry.session
         await s.setSystemPrompt(content)
+      },
+      async getConsolidatePrompt(sessionId: string) {
+        return perSessionConsolidatePrompt.get(sessionId) ?? null
+      },
+      async setConsolidatePrompt(sessionId: string, content: string) {
+        perSessionConsolidatePrompt.set(sessionId, content)
+      },
+      async getIntegratePrompt(sessionId: string) {
+        return perSessionIntegratePrompt.get(sessionId) ?? null
+      },
+      async setIntegratePrompt(sessionId: string, content: string) {
+        perSessionIntegratePrompt.set(sessionId, content)
       },
       async getScope(sessionId: string) {
         const entry = sessionMap.get(sessionId)

@@ -397,6 +397,44 @@ export function createRoutes(
     return c.json({ ok: true })
   })
 
+  /** 获取 session 的 consolidate prompt */
+  app.get('/sessions/:id/consolidate-prompt', async (c) => {
+    if (!sessionAccessProvider?.getConsolidatePrompt) return c.json({ configured: false, content: null })
+    const id = c.req.param('id')
+    const content = await sessionAccessProvider.getConsolidatePrompt(id)
+    return c.json({ configured: true, content })
+  })
+
+  /** 更新 session 的 consolidate prompt */
+  app.put('/sessions/:id/consolidate-prompt', async (c) => {
+    if (!sessionAccessProvider?.setConsolidatePrompt) return c.json({ error: 'Consolidate prompt editing not configured' }, 400)
+    const id = c.req.param('id')
+    const { content } = await c.req.json<{ content: string }>()
+    if (typeof content !== 'string') return c.json({ error: 'content must be a string' }, 400)
+    await sessionAccessProvider.setConsolidatePrompt(id, content)
+    onEvent?.({ type: 'consolidate-prompt.updated', sessionId: id })
+    return c.json({ ok: true })
+  })
+
+  /** 获取 session 的 integrate prompt */
+  app.get('/sessions/:id/integrate-prompt', async (c) => {
+    if (!sessionAccessProvider?.getIntegratePrompt) return c.json({ configured: false, content: null })
+    const id = c.req.param('id')
+    const content = await sessionAccessProvider.getIntegratePrompt(id)
+    return c.json({ configured: true, content })
+  })
+
+  /** 更新 session 的 integrate prompt */
+  app.put('/sessions/:id/integrate-prompt', async (c) => {
+    if (!sessionAccessProvider?.setIntegratePrompt) return c.json({ error: 'Integrate prompt editing not configured' }, 400)
+    const id = c.req.param('id')
+    const { content } = await c.req.json<{ content: string }>()
+    if (typeof content !== 'string') return c.json({ error: 'content must be a string' }, 400)
+    await sessionAccessProvider.setIntegratePrompt(id, content)
+    onEvent?.({ type: 'integrate-prompt.updated', sessionId: id })
+    return c.json({ ok: true })
+  })
+
   /** 读取 session 的 scope/insights */
   app.get('/sessions/:id/scope', async (c) => {
     if (!sessionAccessProvider?.getScope) return c.json({ configured: false, content: null })

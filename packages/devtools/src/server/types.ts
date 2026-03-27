@@ -16,6 +16,14 @@ export interface SessionAccessProvider {
   getSystemPrompt(sessionId: string): Promise<string | null>
   /** 写入 system prompt */
   setSystemPrompt(sessionId: string, content: string): Promise<void>
+  /** 读取 per-session consolidate prompt */
+  getConsolidatePrompt?(sessionId: string): Promise<string | null>
+  /** 写入 per-session consolidate prompt */
+  setConsolidatePrompt?(sessionId: string, content: string): Promise<void>
+  /** 读取 per-session integrate prompt */
+  getIntegratePrompt?(sessionId: string): Promise<string | null>
+  /** 写入 per-session integrate prompt */
+  setIntegratePrompt?(sessionId: string, content: string): Promise<void>
   /** 读取 scope/insights */
   getScope?(sessionId: string): Promise<string | null>
   /** 写入 scope/insights */
