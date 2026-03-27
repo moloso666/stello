@@ -4,7 +4,6 @@ import {
   SessionTreeImpl,
   SkillRouterImpl,
   Scheduler,
-  SplitGuard,
   createStelloAgent,
   type ConfirmProtocol,
   type CoreSchema,
@@ -22,10 +21,11 @@ import {
   createDefaultIntegrateFn,
   type LLMCallFn,
 } from '../../packages/core/src/index'
-import { startDevtools } from '../../packages/devtools/src/index'
+import { startDevtools, type DevtoolsPersistedState, type DevtoolsStateStore } from '../../packages/devtools/src/index'
 import {
   createOpenAICompatibleAdapter,
 } from '../../packages/session/src/adapters/openai-compatible'
+import { createSessionTool } from '../../packages/session/src/tools/create-session-tool'
 import { loadMainSession } from '../../packages/session/src/create-main-session'
 import { loadSession } from '../../packages/session/src/create-session'
 import { InMemoryStorageAdapter } from '../../packages/session/src/mocks/in-memory-storage'
@@ -38,13 +38,13 @@ const host = process.env.DEMO_HOST ?? '127.0.0.1'
 
 const openaiApiKey = process.env.OPENAI_API_KEY
 const openaiBaseURL = process.env.OPENAI_BASE_URL ?? 'https://api.minimaxi.com/v1'
-const openaiModel = process.env.OPENAI_MODEL ?? 'MiniMax-M1'
+const openaiModel = process.env.OPENAI_MODEL ?? 'MiniMax-M2.7'
 
 if (!openaiApiKey) {
   console.error('Missing OPENAI_API_KEY')
   console.error('  export OPENAI_BASE_URL=https://api.minimaxi.com/v1')
   console.error('  export OPENAI_API_KEY=your_key')
-  console.error('  export OPENAI_MODEL=MiniMax-M1')
+  console.error('  export OPENAI_MODEL=MiniMax-M2.7')
   process.exit(1)
 }
 
@@ -58,7 +58,11 @@ const MAIN_SYSTEM_PROMPT = `你是一位资深留学咨询顾问「Stello」。�
 - 你是总顾问，负责跨地区对比和最终推荐，不需要深入每个地区的细节——细节由各地区子会话的专家负责
 
 ## 工具使用规则
-- 当对话中出现新的目标地区，**必须立即调用** stello_create_session，label 为地区名（如"美国选校"），scope 为地区关键词（如"美国"）
+- 当对话中出现新的目标地区，**必须立即调用** stello_create_session
+- 调用时必须提供：
+  - label：子会话名称，如"美国选校"
+  - systemPrompt：该地区专家的系统提示词，明确限定只负责该地区
+- 如有必要，可以提供 prompt 作为子会话的第一条用户消息，帮助它立即进入工作状态
 - 不要等用户明确要求，根据对话上下文主动判断
 
 ## 回答风格
@@ -121,8 +125,21 @@ type DemoToolDef = Array<{
   inputSchema: Record<string, unknown>
 }>
 
+interface ChildSessionBootstrapOptions {
+  parentId: string
+  label: string
+  scope?: string
+  systemPrompt?: string
+  prompt?: string
+}
+
 type WrappedSession = { session: Session; main?: never }
 type WrappedMainSession = { main: MainSession; session?: never }
+
+/** 判断当前是否为普通子会话。 */
+function isStandardSession(session: Session | MainSession): session is Session {
+  return 'insight' in session
+}
 
 /** 支持运行时启停的 SkillRouter 包装 */
 class ToggleableSkillRouter implements SkillRouter {
@@ -152,16 +169,51 @@ class ToggleableSkillRouter implements SkillRouter {
 /** 同步子会话的 insight 到文件层镜像，避免 UI 和真实上下文状态分裂 */
 async function syncSessionScopeMirror(
   coreSessionId: string,
-  session: Session,
+  session: Session | MainSession,
   memoryEngine?: MemoryEngine,
 ): Promise<void> {
   if (!memoryEngine) return
+  if (!isStandardSession(session)) return
   const insight = await session.insight()
   await memoryEngine.writeScope(coreSessionId, insight ?? '')
 }
 
+/** 读取持久化的 session system prompt */
+async function readPersistedSystemPrompt(
+  fs: NodeFileSystemAdapter,
+  sessionId: string,
+): Promise<string | null> {
+  return fs.readJSON<string>(`memory/sessions/${sessionId}/system-prompt.json`).catch(() => null)
+}
+
+/** 写入持久化的 session system prompt */
+async function writePersistedSystemPrompt(
+  fs: NodeFileSystemAdapter,
+  sessionId: string,
+  content: string,
+): Promise<void> {
+  await fs.writeJSON(`memory/sessions/${sessionId}/system-prompt.json`, content)
+}
+
+/** 创建文件型 DevTools state store */
+function createFileDevtoolsStateStore(fs: NodeFileSystemAdapter): DevtoolsStateStore {
+  const path = 'memory/devtools-state.json'
+  return {
+    async load(): Promise<DevtoolsPersistedState | null> {
+      return fs.readJSON<DevtoolsPersistedState>(path).catch(() => null)
+    },
+    async save(state: DevtoolsPersistedState): Promise<void> {
+      await fs.writeJSON(path, state)
+    },
+    async reset(): Promise<void> {
+      await fs.writeJSON(path, {})
+    },
+  }
+}
+
 /** 把 core session 元数据注册到 session storage，并按 core id 加载真实 Session */
 async function registerStandardSession(
+  fs: NodeFileSystemAdapter,
   storage: InMemoryStorageAdapter,
   sessionId: string,
   label: string,
@@ -180,8 +232,9 @@ async function registerStandardSession(
     createdAt: now,
     updatedAt: now,
   }
+  const effectiveSystemPrompt = (await readPersistedSystemPrompt(fs, sessionId)) ?? systemPrompt
   await storage.putSession(meta)
-  await storage.putSystemPrompt(sessionId, systemPrompt)
+  await storage.putSystemPrompt(sessionId, effectiveSystemPrompt)
   const session = await loadSession(sessionId, { storage, llm, tools: [...tools] })
   if (!session) throw new Error(`Failed to load standard session: ${sessionId}`)
   return session
@@ -189,6 +242,7 @@ async function registerStandardSession(
 
 /** 把 core root 元数据注册到 session storage，并按 core id 加载真实 MainSession */
 async function registerMainSession(
+  fs: NodeFileSystemAdapter,
   storage: InMemoryStorageAdapter,
   sessionId: string,
   label: string,
@@ -207,8 +261,9 @@ async function registerMainSession(
     createdAt: now,
     updatedAt: now,
   }
+  const effectiveSystemPrompt = (await readPersistedSystemPrompt(fs, sessionId)) ?? systemPrompt
   await storage.putSession(meta)
-  await storage.putSystemPrompt(sessionId, systemPrompt)
+  await storage.putSystemPrompt(sessionId, effectiveSystemPrompt)
   const session = await loadMainSession(sessionId, { storage, llm, tools: [...tools] })
   if (!session) throw new Error(`Failed to load main session: ${sessionId}`)
   return session
@@ -230,6 +285,12 @@ async function hydrateRuntimeState(
     await storage.appendRecord(sessionId, {
       role: record.role,
       content: record.content,
+      ...(record.metadata?.toolCallId && typeof record.metadata.toolCallId === 'string'
+        ? { toolCallId: record.metadata.toolCallId }
+        : {}),
+      ...(Array.isArray(record.metadata?.toolCalls)
+        ? { toolCalls: record.metadata.toolCalls as Array<{ id: string; name: string; input: Record<string, unknown> }> }
+        : {}),
       timestamp: record.timestamp,
     })
   }
@@ -241,7 +302,42 @@ async function hydrateRuntimeState(
   }
 }
 
-function wrapSession(coreSessionId: string, session: Session, memoryEngine?: MemoryEngine) {
+/** 创建子会话并同步拓扑、真实 Session 和初始上下文。 */
+async function createDemoChildSession(
+  fs: NodeFileSystemAdapter,
+  sessions: SessionTreeImpl,
+  storage: InMemoryStorageAdapter,
+  llm: ReturnType<typeof createOpenAICompatibleAdapter>,
+  tools: DemoToolDef,
+  sessionMap: Map<string, WrappedSession | WrappedMainSession>,
+  memory: MemoryEngine,
+  options: ChildSessionBootstrapOptions,
+): Promise<TopologyNode> {
+  const child = await sessions.createChild({
+    parentId: options.parentId,
+    label: options.label,
+    scope: options.scope,
+  })
+  const childSession = await registerStandardSession(
+    fs,
+    storage,
+    child.id,
+    child.label,
+    options.systemPrompt ?? makeRegionPrompt(options.scope ?? child.label, child.label),
+    llm,
+    [...tools],
+  )
+  if (options.prompt) {
+    const record = { role: 'assistant' as const, content: options.prompt, timestamp: new Date().toISOString() }
+    await storage.appendRecord(child.id, record)
+    await memory.appendRecord(child.id, record)
+  }
+  sessionMap.set(child.id, { session: childSession })
+  return child
+}
+
+/** 把普通 Session 适配成 core 兼容接口。 */
+function wrapStandardSession(coreSessionId: string, session: Session, memoryEngine?: MemoryEngine) {
   return {
     get meta() {
       return { id: coreSessionId, status: session.meta.status } as const
@@ -274,6 +370,25 @@ function wrapSession(coreSessionId: string, session: Session, memoryEngine?: Mem
         const l2 = await session.memory()
         if (l2) await memoryEngine.writeMemory(coreSessionId, l2)
       }
+    },
+  }
+}
+
+/** 把 MainSession 适配成 core 兼容接口。 */
+function wrapMainSession(coreSessionId: string, session: MainSession) {
+  return {
+    get meta() {
+      return { id: coreSessionId, status: session.meta.status } as const
+    },
+    async send(content: string) {
+      return session.send(content)
+    },
+    stream(content: string) {
+      return session.stream(content)
+    },
+    async messages() { return session.messages() },
+    async consolidate() {
+      // MainSession 没有 L2 consolidation，调度到 root 时直接跳过。
     },
   }
 }
@@ -315,6 +430,9 @@ function createFileMemoryEngine(fs: NodeFileSystemAdapter, sessions: SessionTree
       list.push(record)
       await fs.writeJSON(recordsPath(sessionId), list)
     },
+    async replaceRecords(sessionId: string, records: TurnRecord[]) {
+      await fs.writeJSON(recordsPath(sessionId), records)
+    },
     async readRecords(sessionId: string) { return (await fs.readJSON<TurnRecord[]>(recordsPath(sessionId))) ?? [] },
     async assembleContext(sessionId: string) {
       const core = await this.readCore() as Record<string, unknown>
@@ -336,7 +454,8 @@ function createFileMemoryEngine(fs: NodeFileSystemAdapter, sessions: SessionTree
 async function bootstrap() {
   const fs = new NodeFileSystemAdapter(dataDir)
   const sessions = new SessionTreeImpl(fs)
-  let currentLlm = createOpenAICompatibleAdapter({ apiKey: openaiApiKey!, baseURL: openaiBaseURL, model: openaiModel, extraBody: { reasoning_split: true } })
+  const stateStore = createFileDevtoolsStateStore(fs)
+  let currentLlm = createOpenAICompatibleAdapter({ apiKey: openaiApiKey!, baseURL: openaiBaseURL, model: openaiModel })
   let currentLlmConfig = { model: openaiModel, baseURL: openaiBaseURL, apiKey: openaiApiKey!, temperature: 0.7, maxTokens: 2048 }
 
   const llmCall: LLMCallFn = async (messages) => {
@@ -349,6 +468,8 @@ async function bootstrap() {
 
   let currentConsolidatePrompt = CONSOLIDATE_PROMPT
   let currentIntegratePrompt = INTEGRATE_PROMPT
+  const perSessionConsolidatePrompt = new Map<string, string>()
+  const perSessionIntegratePrompt = new Map<string, string>()
   const disabledTools = new Set<string>()
   const disabledSkills = new Set<string>()
   const baseSkillRouter = new SkillRouterImpl()
@@ -363,14 +484,15 @@ async function bootstrap() {
   const toolDefs = [
     {
       name: 'stello_create_session',
-      description: '为新的留学目标地区创建专门的调研子会话。当对话中出现新地区时必须调用。',
+      description: '从当前会话派生一个新的子会话，用于承接新的地区或更细的专题。',
       inputSchema: {
         type: 'object',
         properties: {
           label: { type: 'string', description: '子会话显示名称，如"美国选校"、"英国选校"' },
-          scope: { type: 'string', description: '地区关键词，如"美国"、"英国"、"欧洲"' },
+          systemPrompt: { type: 'string', description: '子会话系统提示词；不提供则继承父会话系统提示词' },
+          prompt: { type: 'string', description: '子会话的第一条用户消息，用于立即进入工作状态' },
         },
-        required: ['label', 'scope'],
+        required: ['label'],
       },
     },
     {
@@ -402,6 +524,7 @@ async function bootstrap() {
   }
 
   const mainSession = await registerMainSession(
+    fs,
     sessionStorage,
     rootId,
     rootLabel,
@@ -417,6 +540,7 @@ async function bootstrap() {
   for (const meta of allSessions) {
     if (meta.id === rootId || sessionMap.has(meta.id)) continue
     const childSession = await registerStandardSession(
+      fs,
       sessionStorage,
       meta.id,
       meta.label,
@@ -437,24 +561,48 @@ async function bootstrap() {
       session: await requireSession(sessions, sessionId),
     }),
     afterTurn: async (sessionId, userMsg, assistantMsg) => {
-      await memory.appendRecord(sessionId, userMsg)
-      await memory.appendRecord(sessionId, assistantMsg)
+      const entry = sessionMap.get(sessionId)
+      const runtimeSession = entry
+        ? ('main' in entry && entry.main ? entry.main : entry.session)
+        : null
+      if (runtimeSession && memory.replaceRecords) {
+        const records = await runtimeSession.messages()
+        await memory.replaceRecords(sessionId, records.map((record) => ({
+          role: record.role,
+          content: record.content,
+          timestamp: record.timestamp ?? new Date().toISOString(),
+          ...(record.toolCallId || record.toolCalls
+            ? {
+                metadata: {
+                  ...(record.toolCallId ? { toolCallId: record.toolCallId } : {}),
+                  ...(record.toolCalls ? { toolCalls: record.toolCalls } : {}),
+                },
+              }
+            : {}),
+        })))
+      } else {
+        await memory.appendRecord(sessionId, userMsg)
+        await memory.appendRecord(sessionId, assistantMsg)
+      }
       const current = await requireSession(sessions, sessionId)
       await sessions.updateMeta(sessionId, { turnCount: current.turnCount + 1 })
       return { coreUpdated: false, memoryUpdated: false, recordAppended: true }
     },
     prepareChildSpawn: async (options) => {
-      const child = await sessions.createChild(options)
-      const childSession = await registerStandardSession(
+      return createDemoChildSession(
+        fs,
+        sessions,
         sessionStorage,
-        child.id,
-        child.label,
-        makeRegionPrompt(options.scope ?? child.label, child.label),
         currentLlm,
         [...toolDefs],
+        sessionMap,
+        memory,
+        {
+          parentId: options.parentId,
+          label: options.label,
+          scope: options.scope,
+        },
       )
-      sessionMap.set(child.id, { session: childSession })
-      return child
     },
   }
 
@@ -473,17 +621,45 @@ async function bootstrap() {
         if (!currentToolSessionId) return { success: false, error: 'No active session context' }
         const source = await requireNode(sessions, currentToolSessionId)
         const effectiveParentId = source.parentId === null ? source.id : (await sessions.getRoot()).id
-        const child = await lifecycle.prepareChildSpawn({
-          parentId: effectiveParentId,
-          label: String(args.label ?? '新地区'),
-          scope: args.scope ? String(args.scope) : undefined,
+        const parentEntry = sessionMap.get(currentToolSessionId)
+        if (!parentEntry) return { success: false, error: `Unknown session: ${currentToolSessionId}` }
+        const parentSession = 'main' in parentEntry && parentEntry.main ? parentEntry.main : parentEntry.session
+        const createTool = createSessionTool(() => ({
+          fork: async (forkOptions) => {
+            const child = await createDemoChildSession(
+              fs,
+              sessions,
+              sessionStorage,
+              currentLlm,
+              [...toolDefs],
+              sessionMap,
+              memory,
+              {
+                parentId: effectiveParentId,
+                label: forkOptions.label,
+                systemPrompt: forkOptions.systemPrompt ?? await parentSession.systemPrompt() ?? undefined,
+                prompt: forkOptions.prompt,
+              },
+            )
+            const childEntry = sessionMap.get(child.id)
+            if (!childEntry || !('session' in childEntry) || !childEntry.session) {
+              throw new Error(`Failed to load child session: ${child.id}`)
+            }
+            return childEntry.session
+          },
+        } as Session))
+        const result = await createTool.execute({
+          label: String(args.label ?? '新会话'),
+          ...(args.systemPrompt ? { systemPrompt: String(args.systemPrompt) } : {}),
+          ...(args.prompt ? { prompt: String(args.prompt) } : {}),
         })
+        const output = result.output as { sessionId: string; label: string }
+        const child = await requireNode(sessions, output.sessionId)
         return {
           success: true,
           data: {
-            sessionId: child.id,
-            label: child.label,
-            scope: args.scope ? String(args.scope) : undefined,
+            sessionId: output.sessionId,
+            label: output.label,
             parentId: child.parentId,
           },
         }
@@ -500,14 +676,12 @@ async function bootstrap() {
     },
   }
 
-  // ─── Scheduler + SplitGuard ───
+  // ─── Scheduler ───
 
   const scheduler = new Scheduler({
     consolidation: { trigger: 'everyNTurns', everyNTurns: 3 },
     integration: { trigger: 'afterConsolidate' },
   })
-
-  const splitGuard = new SplitGuard(sessions, { minTurns: 2, cooldownTurns: 3 })
 
   // ─── Agent Config ───
 
@@ -532,9 +706,9 @@ async function bootstrap() {
         const entry = sessionMap.get(sessionId)
         if (!entry) throw new Error(`Unknown session: ${sessionId}`)
         if ('main' in entry && entry.main) {
-          throw new Error('Main session is not available through sessionResolver')
+          return wrapMainSession(sessionId, entry.main)
         }
-        return wrapSession(sessionId, entry.session, memory)
+        return wrapStandardSession(sessionId, entry.session, memory)
       },
       mainSessionResolver: async () => ({
         async integrate(fn: Parameters<typeof mainSession.integrate>[0]) {
@@ -566,7 +740,6 @@ async function bootstrap() {
     },
     orchestration: {
       scheduler,
-      splitGuard,
       hooks: {
         onRoundStart({ sessionId }) { currentToolSessionId = sessionId },
         onRoundEnd({ sessionId, input, turn }) {
@@ -597,6 +770,19 @@ async function bootstrap() {
         if (!entry) return
         const s = 'main' in entry && entry.main ? entry.main : entry.session
         await s.setSystemPrompt(content)
+        await writePersistedSystemPrompt(fs, sessionId, content)
+      },
+      async getConsolidatePrompt(sessionId: string) {
+        return perSessionConsolidatePrompt.get(sessionId) ?? null
+      },
+      async setConsolidatePrompt(sessionId: string, content: string) {
+        perSessionConsolidatePrompt.set(sessionId, content)
+      },
+      async getIntegratePrompt(sessionId: string) {
+        return perSessionIntegratePrompt.get(sessionId) ?? null
+      },
+      async setIntegratePrompt(sessionId: string, content: string) {
+        perSessionIntegratePrompt.set(sessionId, content)
       },
       async getScope(sessionId: string) {
         const entry = sessionMap.get(sessionId)
@@ -623,7 +809,7 @@ async function bootstrap() {
     llm: {
       getConfig: () => ({ ...currentLlmConfig }),
       setConfig: (cfg: { model: string; baseURL: string; apiKey?: string; temperature?: number; maxTokens?: number }) => {
-        const newLlm = createOpenAICompatibleAdapter({ apiKey: cfg.apiKey ?? currentLlmConfig.apiKey, baseURL: cfg.baseURL, model: cfg.model, extraBody: { reasoning_split: true } })
+        const newLlm = createOpenAICompatibleAdapter({ apiKey: cfg.apiKey ?? currentLlmConfig.apiKey, baseURL: cfg.baseURL, model: cfg.model })
         currentLlmConfig = { model: cfg.model, baseURL: cfg.baseURL, apiKey: cfg.apiKey ?? currentLlmConfig.apiKey, temperature: cfg.temperature ?? currentLlmConfig.temperature, maxTokens: cfg.maxTokens ?? currentLlmConfig.maxTokens }
         currentLlm = newLlm
         for (const entry of Array.from(sessionMap.values())) {
@@ -654,6 +840,7 @@ async function bootstrap() {
         return { synthesis: result.synthesis, insightCount: result.insights.length }
       },
     },
+    stateStore,
   }
 }
 
@@ -688,6 +875,7 @@ async function main() {
     tools: app.tools,
     skills: app.skills,
     integration: app.integration,
+    stateStore: app.stateStore,
   })
 
   console.log(`\nStello 留学选校顾问 Demo`)

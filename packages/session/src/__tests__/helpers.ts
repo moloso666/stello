@@ -1,4 +1,4 @@
-import type { LLMAdapter, LLMResult, Message } from '../types/llm.js'
+import type { LLMAdapter, LLMResult } from '../types/llm.js'
 import type { Session } from '../types/session-api.js'
 import type { CreateSessionOptions } from '../types/functions.js'
 import { createSession } from '../create-session.js'
@@ -11,7 +11,7 @@ import { InMemoryStorageAdapter } from '../mocks/in-memory-storage.js'
 export function createMockLLM(responses: LLMResult[]): LLMAdapter {
   let index = 0
   return {
-    async complete(_messages: Message[]): Promise<LLMResult> {
+    async complete(): Promise<LLMResult> {
       if (index >= responses.length) {
         throw new Error(`MockLLM: no more responses (called ${index + 1} times, only ${responses.length} provided)`)
       }
@@ -28,7 +28,8 @@ export async function makeSession(
   opts?: Partial<Omit<CreateSessionOptions, 'storage'>> & { storage?: InMemoryStorageAdapter }
 ): Promise<{ session: Session; storage: InMemoryStorageAdapter }> {
   const storage = opts?.storage ?? new InMemoryStorageAdapter()
-  const { storage: _ignored, ...rest } = opts ?? {}
+  const rest = opts ? { ...opts } : {}
+  delete rest.storage
   const session = await createSession({
     storage,
     label: 'Test Session',

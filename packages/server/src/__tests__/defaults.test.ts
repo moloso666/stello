@@ -1,3 +1,4 @@
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-nocheck - 此文件测试的是旧版 API（5 参数），已被新版 API（2 参数）替代
 import { describe, it, expect, vi, beforeAll, afterAll, beforeEach } from 'vitest'
 import type pg from 'pg'

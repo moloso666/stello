@@ -51,7 +51,7 @@ describe('insight() + setInsight()', () => {
   })
 
   it('不同 session 的 insight 互不干扰', async () => {
-    const { session: s1, storage } = await makeSession()
+    const { session: s1 } = await makeSession()
     const { session: s2 } = await makeSession()
     await s1.setInsight('insight-1')
     // s2 使用独立 storage，应为 null

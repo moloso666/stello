@@ -1,7 +1,7 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { ChevronDown, ChevronRight, Pencil, ArrowDownRight, Loader2, Search, Filter, Save } from 'lucide-react'
-import { fetchSessions, fetchSessionDetail, fetchSystemPrompt, updateSystemPrompt, fetchScope, updateScope, injectRecord, triggerIntegration, type SessionMeta, type SessionDetail } from '@/lib/api'
+import { fetchSessions, fetchSessionDetail, fetchSystemPrompt, updateSystemPrompt, fetchConsolidatePrompt, updateConsolidatePrompt, fetchIntegratePrompt, updateIntegratePrompt, fetchScope, updateScope, injectRecord, consolidateSession, triggerIntegration, type SessionMeta, type SessionDetail } from '@/lib/api'
 import { useI18n } from '@/lib/i18n'
 import { EditDialog, type EditField } from '@/components/EditDialog'
 
@@ -113,14 +113,13 @@ export function Inspector() {
   const [roleFilter, setRoleFilter] = useState<'all' | 'user' | 'assistant' | 'system'>('all')
   const [sysPrompt, setSysPrompt] = useState<string | null>(null)
   const [sysPromptConfigured, setSysPromptConfigured] = useState(false)
-  const [sysPromptEditing, setSysPromptEditing] = useState(false)
-  const [sysPromptDraft, setSysPromptDraft] = useState('')
-  const [sysPromptSaving, setSysPromptSaving] = useState(false)
+  const [consolidatePrompt, setConsolidatePrompt] = useState<string | null>(null)
+  const [consolidatePromptConfigured, setConsolidatePromptConfigured] = useState(false)
+  const [integratePrompt, setIntegratePrompt] = useState<string | null>(null)
+  const [integratePromptConfigured, setIntegratePromptConfigured] = useState(false)
   const [scopeContent, setScopeContent] = useState<string | null>(null)
   const [scopeConfigured, setScopeConfigured] = useState(false)
-  const [scopeEditing, setScopeEditing] = useState(false)
-  const [scopeDraft, setScopeDraft] = useState('')
-  const [scopeSaving, setScopeSaving] = useState(false)
+  const [consolidating, setConsolidating] = useState(false)
   const [integrating, setIntegrating] = useState(false)
   const [injectOpen, setInjectOpen] = useState(false)
   const [injectRole, setInjectRole] = useState<'user' | 'assistant'>('user')
@@ -148,7 +147,6 @@ export function Inspector() {
   useEffect(() => {
     if (!selectedId) return
     setLoading(true)
-    setSysPromptEditing(false)
     fetchSessionDetail(selectedId)
       .then(setDetail)
       .catch(() => setDetail(null))
@@ -156,6 +154,12 @@ export function Inspector() {
     fetchSystemPrompt(selectedId)
       .then((r) => { setSysPromptConfigured(r.configured); setSysPrompt(r.content) })
       .catch(() => { setSysPromptConfigured(false); setSysPrompt(null) })
+    fetchConsolidatePrompt(selectedId)
+      .then((r) => { setConsolidatePromptConfigured(r.configured); setConsolidatePrompt(r.content) })
+      .catch(() => { setConsolidatePromptConfigured(false); setConsolidatePrompt(null) })
+    fetchIntegratePrompt(selectedId)
+      .then((r) => { setIntegratePromptConfigured(r.configured); setIntegratePrompt(r.content) })
+      .catch(() => { setIntegratePromptConfigured(false); setIntegratePrompt(null) })
     fetchScope(selectedId)
       .then((r) => { setScopeConfigured(r.configured); setScopeContent(r.content) })
       .catch(() => { setScopeConfigured(false); setScopeContent(null) })
@@ -223,6 +227,22 @@ export function Inspector() {
                     className="flex items-center gap-1 px-2 py-1 text-[10px] font-medium bg-primary/10 hover:bg-primary/20 rounded transition-colors text-primary"
                   >
                     {t('insp.injectRecord')}
+                  </button>
+                  <button
+                    onClick={async () => {
+                      if (!selectedId) return
+                      setConsolidating(true)
+                      try {
+                        await consolidateSession(selectedId)
+                        fetchSessionDetail(selectedId).then(setDetail).catch(() => {})
+                      } catch { /* ignore */ }
+                      setConsolidating(false)
+                    }}
+                    disabled={consolidating}
+                    className="flex items-center gap-1 px-2 py-1 text-[10px] font-medium bg-[#E8F5E9] hover:bg-[#C8E6C9] rounded transition-colors text-success disabled:opacity-50"
+                  >
+                    {consolidating ? <Loader2 size={10} className="animate-spin" /> : <ArrowDownRight size={10} />}
+                    {t('insp.consolidate')}
                   </button>
                   <button
                     onClick={async () => {
@@ -420,6 +440,70 @@ export function Inspector() {
                   </div>
                 ) : (
                   <p className="text-[11px] text-text-muted italic">{t('insp.sysPromptHint')}</p>
+                )}
+              </DataCard>
+
+              {/* Consolidate Prompt */}
+              <DataCard
+                title={t('insp.consolidatePromptTitle')}
+                badge={consolidatePromptConfigured ? (consolidatePrompt ? t('insp.promptCustom') : t('insp.promptDefault')) : undefined}
+                badgeColor={consolidatePrompt ? 'green' : 'orange'}
+              >
+                {consolidatePromptConfigured ? (
+                  <div className="group relative">
+                    <p className="text-[11px] text-text-secondary leading-relaxed whitespace-pre-wrap line-clamp-6">
+                      {consolidatePrompt ?? <span className="italic text-text-muted">{t('insp.promptDefault')}</span>}
+                    </p>
+                    <button
+                      onClick={() => {
+                        setDialogTitle(t('insp.consolidatePromptTitle'))
+                        setDialogFields([{ key: 'content', label: t('insp.consolidatePromptTitle'), type: 'textarea', value: consolidatePrompt ?? '' }])
+                        setDialogSaveFn(() => async (v: Record<string, string | number>) => {
+                          if (!selectedId) return
+                          await updateConsolidatePrompt(selectedId, String(v.content))
+                          setConsolidatePrompt(String(v.content))
+                        })
+                        setDialogOpen(true)
+                      }}
+                      className="absolute top-0 right-0 opacity-0 group-hover:opacity-100 p-1 bg-surface rounded border border-border hover:border-primary transition-all"
+                    >
+                      <Pencil size={10} className="text-text-muted hover:text-primary" />
+                    </button>
+                  </div>
+                ) : (
+                  <p className="text-[11px] text-text-muted italic">{t('insp.promptHint')}</p>
+                )}
+              </DataCard>
+
+              {/* Integrate Prompt */}
+              <DataCard
+                title={t('insp.integratePromptTitle')}
+                badge={integratePromptConfigured ? (integratePrompt ? t('insp.promptCustom') : t('insp.promptDefault')) : undefined}
+                badgeColor={integratePrompt ? 'green' : 'orange'}
+              >
+                {integratePromptConfigured ? (
+                  <div className="group relative">
+                    <p className="text-[11px] text-text-secondary leading-relaxed whitespace-pre-wrap line-clamp-6">
+                      {integratePrompt ?? <span className="italic text-text-muted">{t('insp.promptDefault')}</span>}
+                    </p>
+                    <button
+                      onClick={() => {
+                        setDialogTitle(t('insp.integratePromptTitle'))
+                        setDialogFields([{ key: 'content', label: t('insp.integratePromptTitle'), type: 'textarea', value: integratePrompt ?? '' }])
+                        setDialogSaveFn(() => async (v: Record<string, string | number>) => {
+                          if (!selectedId) return
+                          await updateIntegratePrompt(selectedId, String(v.content))
+                          setIntegratePrompt(String(v.content))
+                        })
+                        setDialogOpen(true)
+                      }}
+                      className="absolute top-0 right-0 opacity-0 group-hover:opacity-100 p-1 bg-surface rounded border border-border hover:border-primary transition-all"
+                    >
+                      <Pencil size={10} className="text-text-muted hover:text-primary" />
+                    </button>
+                  </div>
+                ) : (
+                  <p className="text-[11px] text-text-muted italic">{t('insp.promptHint')}</p>
                 )}
               </DataCard>
 

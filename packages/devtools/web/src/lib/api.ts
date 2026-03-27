@@ -83,6 +83,15 @@ export interface TurnResult {
     toolRoundCount: number
     toolCallsExecuted: number
     rawResponse: string
+    toolCalls?: Array<{
+      id: string
+      name: string
+      args: Record<string, unknown>
+      success?: boolean
+      data?: unknown
+      error?: string | null
+      duration?: number
+    }>
   }
 }
 
@@ -226,6 +235,32 @@ export function fetchSystemPrompt(sessionId: string) {
 /** 更新 session 的 system prompt */
 export function updateSystemPrompt(sessionId: string, content: string) {
   return request<{ ok: boolean }>(`/sessions/${sessionId}/system-prompt`, {
+    method: 'PUT',
+    body: JSON.stringify({ content }),
+  })
+}
+
+/** 获取 session 的 consolidate prompt */
+export function fetchConsolidatePrompt(sessionId: string) {
+  return request<{ configured: boolean; content: string | null }>(`/sessions/${sessionId}/consolidate-prompt`)
+}
+
+/** 更新 session 的 consolidate prompt */
+export function updateConsolidatePrompt(sessionId: string, content: string) {
+  return request<{ ok: boolean }>(`/sessions/${sessionId}/consolidate-prompt`, {
+    method: 'PUT',
+    body: JSON.stringify({ content }),
+  })
+}
+
+/** 获取 session 的 integrate prompt */
+export function fetchIntegratePrompt(sessionId: string) {
+  return request<{ configured: boolean; content: string | null }>(`/sessions/${sessionId}/integrate-prompt`)
+}
+
+/** 更新 session 的 integrate prompt */
+export function updateIntegratePrompt(sessionId: string, content: string) {
+  return request<{ ok: boolean }>(`/sessions/${sessionId}/integrate-prompt`, {
     method: 'PUT',
     body: JSON.stringify({ content }),
   })

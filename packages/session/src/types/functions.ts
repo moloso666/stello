@@ -1,6 +1,5 @@
 import type { Message, LLMAdapter, ToolCall, LLMCompleteOptions } from './llm.js'
 import type { SessionStorage, MainStorage } from './storage.js'
-import type { SessionMeta } from './session.js'
 
 /** consolidate 函数签名：L3 → L2，接收当前 L2 和 L3 记录，返回新 L2 */
 export type ConsolidateFn = (currentMemory: string | null, messages: Message[]) => Promise<string>

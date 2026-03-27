@@ -36,16 +36,6 @@ async function post<T>(path: string, body?: unknown): Promise<T> {
   return res.json() as Promise<T>
 }
 
-async function patch<T>(path: string, body: unknown): Promise<T> {
-  const res = await fetch(`${API}${path}`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  })
-  if (!res.ok) throw new Error(`PATCH ${path} → ${res.status}`)
-  return res.json() as Promise<T>
-}
-
 /** 发送消息并等待流式响应完成，返回最终内容 */
 async function chat(sessionId: string, input: string): Promise<string> {
   await post(`/sessions/${sessionId}/enter`).catch(() => {})
@@ -112,10 +102,13 @@ async function run() {
 
   // ─── Step 0: 检查服务可用 ───
   section('Step 0: 服务健康检查')
-  const config = await get<Record<string, unknown>>('/config')
+  const config = await get<{
+    scheduling?: { hasScheduler?: boolean }
+    splitGuard?: unknown
+  }>('/config')
   assert(!!config, 'GET /config 响应正常')
-  assert((config as any).scheduling?.hasScheduler === true, 'Scheduler 已启用')
-  assert((config as any).splitGuard !== null, 'SplitGuard 已启用')
+  assert(config.scheduling?.hasScheduler === true, 'Scheduler 已启用')
+  assert(config.splitGuard !== null, 'SplitGuard 已启用')
 
   const llm = await get<{ configured: boolean; model: string }>('/llm')
   assert(llm.configured, 'LLM Provider 已配置')

@@ -1,3 +1,5 @@
+import type { StelloAgentHotConfig } from '@stello-ai/core'
+
 /** LLM 配置的 getter/setter，由调用方实现具体的 adapter 切换 */
 export interface LLMConfigProvider {
   getConfig(): { model: string; baseURL: string; apiKey?: string; temperature?: number; maxTokens?: number }
@@ -16,6 +18,14 @@ export interface SessionAccessProvider {
   getSystemPrompt(sessionId: string): Promise<string | null>
   /** 写入 system prompt */
   setSystemPrompt(sessionId: string, content: string): Promise<void>
+  /** 读取 per-session consolidate prompt */
+  getConsolidatePrompt?(sessionId: string): Promise<string | null>
+  /** 写入 per-session consolidate prompt */
+  setConsolidatePrompt?(sessionId: string, content: string): Promise<void>
+  /** 读取 per-session integrate prompt */
+  getIntegratePrompt?(sessionId: string): Promise<string | null>
+  /** 写入 per-session integrate prompt */
+  setIntegratePrompt?(sessionId: string, content: string): Promise<void>
   /** 读取 scope/insights */
   getScope?(sessionId: string): Promise<string | null>
   /** 写入 scope/insights */
@@ -52,6 +62,34 @@ export interface IntegrationProvider {
   trigger(): Promise<{ synthesis: string; insightCount: number }>
 }
 
+/** DevTools 可持久化的全局状态 */
+export interface DevtoolsPersistedState {
+  hotConfig?: StelloAgentHotConfig
+  llm?: {
+    model: string
+    baseURL: string
+    apiKey?: string
+    temperature?: number
+    maxTokens?: number
+  }
+  prompts?: {
+    consolidate?: string
+    integrate?: string
+  }
+  disabledTools?: string[]
+  disabledSkills?: string[]
+}
+
+/** DevTools 状态持久化存储 */
+export interface DevtoolsStateStore {
+  /** 启动时读取已保存的状态 */
+  load(): Promise<DevtoolsPersistedState | null>
+  /** 变更后保存当前状态 */
+  save(state: DevtoolsPersistedState): Promise<void>
+  /** 可选：清空已保存状态 */
+  reset?(): Promise<void>
+}
+
 /** startDevtools 配置 */
 export interface DevtoolsOptions {
   /** 监听端口，默认 4800 */
@@ -70,6 +108,8 @@ export interface DevtoolsOptions {
   skills?: SkillsProvider
   /** 手动触发 integration */
   integration?: IntegrationProvider
+  /** 全局 DevTools 状态持久化 */
+  stateStore?: DevtoolsStateStore
 }
 
 /** startDevtools 返回值 */

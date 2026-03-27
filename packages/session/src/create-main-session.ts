@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import type { MainSession } from './types/main-session-api.js'
 import type { MessageQueryOptions } from './types/session-api.js'
-import { SessionArchivedError, NotImplementedError } from './types/session-api.js'
+import { SessionArchivedError } from './types/session-api.js'
 import type { SessionMeta, SessionMetaUpdate } from './types/session.js'
 import type { Message } from './types/llm.js'
 import type {
@@ -9,6 +9,70 @@ import type {
   SendResult, StreamResult,
 } from './types/functions.js'
 import { assembleMainSessionContext } from './context-utils.js'
+
+interface ToolResultEnvelope {
+  toolResults: Array<{
+    toolCallId: string | null
+    toolName: string
+    args: Record<string, unknown>
+    success: boolean
+    data: unknown
+    error: string | null
+  }>
+}
+
+/** 判断输入是否是 TurnRunner 回灌的 toolResults 包。 */
+function parseToolResultEnvelope(content: string): ToolResultEnvelope | null {
+  try {
+    const parsed = JSON.parse(content) as Partial<ToolResultEnvelope>
+    if (!Array.isArray(parsed.toolResults)) return null
+    return {
+      toolResults: parsed.toolResults.map((item) => ({
+        toolCallId: typeof item?.toolCallId === 'string' ? item.toolCallId : null,
+        toolName: typeof item?.toolName === 'string' ? item.toolName : 'unknown_tool',
+        args: typeof item?.args === 'object' && item.args ? item.args : {},
+        success: Boolean(item?.success),
+        data: item?.data ?? null,
+        error: typeof item?.error === 'string' ? item.error : null,
+      })),
+    }
+  } catch {
+    return null
+  }
+}
+
+/** 把 tool 执行结果序列化成可回放的 tool message 内容。 */
+function serializeToolResultContent(result: ToolResultEnvelope['toolResults'][number]): string {
+  return JSON.stringify({
+    toolName: result.toolName,
+    args: result.args,
+    success: result.success,
+    data: result.data,
+    error: result.error,
+  })
+}
+
+/** 为 MainSession 的 toolResults continuation 组装固定上下文与历史。 */
+async function assembleMainSessionReplayContext(
+  sessionId: string,
+  storage: CreateMainSessionOptions['storage'] | LoadMainSessionOptions['storage'],
+): Promise<Message[]> {
+  const messages: Message[] = []
+
+  const sysPrompt = await storage.getSystemPrompt(sessionId)
+  if (sysPrompt) {
+    messages.push({ role: 'system', content: sysPrompt })
+  }
+
+  const synthContent = await storage.getMemory(sessionId)
+  if (synthContent) {
+    messages.push({ role: 'system', content: synthContent })
+  }
+
+  const history = await storage.listRecords(sessionId)
+  messages.push(...history)
+  return messages
+}
 
 function createStreamResult(
   processor: (push: (chunk: string) => void) => Promise<SendResult>
@@ -77,22 +141,40 @@ function buildMainSession(
         throw new Error('LLMAdapter is required for send()')
       }
 
-      // 组装上下文（含 token 预算压缩）
       const { messages, userTimestamp } = await assembleMainSessionContext(
         currentMeta.id, storage, content, options.contextWindow,
       )
 
-      // 调 LLM
-      const result = await options.llm.complete(messages, { tools })
+      let promptMessages = messages
+      let recordsToPersist: Message[] = [{ role: 'user', content, timestamp: userTimestamp }]
+      const toolEnvelope = parseToolResultEnvelope(content)
+      if (toolEnvelope) {
+        const replayContext = await assembleMainSessionReplayContext(currentMeta.id, storage)
+        promptMessages = [
+          ...replayContext,
+          ...toolEnvelope.toolResults.map((result) => ({
+            role: 'tool' as const,
+            toolCallId: result.toolCallId ?? undefined,
+            content: serializeToolResultContent(result),
+            timestamp: userTimestamp,
+          })),
+        ]
+        recordsToPersist = promptMessages.slice(replayContext.length)
+      }
 
-      // 存 L3：用户消息 + assistant 响应
-      const userRecord: Message = { role: 'user', content, timestamp: userTimestamp }
+      // 调 LLM
+      const result = await options.llm.complete(promptMessages, { tools })
+
+      // 存 L3：用户消息或 tool 回灌 + assistant 响应
       const assistantRecord: Message = {
         role: 'assistant',
         content: result.content ?? '',
+        ...(result.toolCalls && result.toolCalls.length > 0 ? { toolCalls: result.toolCalls } : {}),
         timestamp: new Date().toISOString(),
       }
-      await storage.appendRecord(currentMeta.id, userRecord)
+      for (const record of recordsToPersist) {
+        await storage.appendRecord(currentMeta.id, record)
+      }
       await storage.appendRecord(currentMeta.id, assistantRecord)
 
       return {
@@ -116,7 +198,22 @@ function buildMainSession(
           currentMeta.id, storage, content, options.contextWindow,
         )
 
-        const now = userTimestamp
+        let promptMessages = messages
+        let recordsToPersist: Message[] = [{ role: 'user', content, timestamp: userTimestamp }]
+        const toolEnvelope = parseToolResultEnvelope(content)
+        if (toolEnvelope) {
+          const replayContext = await assembleMainSessionReplayContext(currentMeta.id, storage)
+          promptMessages = [
+            ...replayContext,
+            ...toolEnvelope.toolResults.map((result) => ({
+              role: 'tool' as const,
+              toolCallId: result.toolCallId ?? undefined,
+              content: serializeToolResultContent(result),
+              timestamp: userTimestamp,
+            })),
+          ]
+          recordsToPersist = promptMessages.slice(replayContext.length)
+        }
 
         if (!options.llm) {
           throw new Error('LLM adapter not set. Call setLLM() first or pass llm to createMainSession().')
@@ -126,7 +223,7 @@ function buildMainSession(
         if (options.llm.stream) {
           let accumulated = ''
           const toolCallsByIndex = new Map<number, { id?: string; name?: string; input: string }>()
-          for await (const chunk of options.llm.stream(messages, { tools })) {
+          for await (const chunk of options.llm.stream(promptMessages, { tools })) {
             accumulated += chunk.delta
             push(chunk.delta)
             for (const delta of chunk.toolCallDeltas ?? []) {
@@ -144,19 +241,21 @@ function buildMainSession(
           }))
           result = { content: accumulated, toolCalls }
         } else {
-          result = await options.llm.complete(messages, { tools })
+          result = await options.llm.complete(promptMessages, { tools })
           if (result.content) {
             push(result.content)
           }
         }
 
-        const userRecord: Message = { role: 'user', content, timestamp: now }
         const assistantRecord: Message = {
           role: 'assistant',
           content: result.content ?? '',
+          ...(result.toolCalls && result.toolCalls.length > 0 ? { toolCalls: result.toolCalls } : {}),
           timestamp: new Date().toISOString(),
         }
-        await storage.appendRecord(currentMeta.id, userRecord)
+        for (const record of recordsToPersist) {
+          await storage.appendRecord(currentMeta.id, record)
+        }
         await storage.appendRecord(currentMeta.id, assistantRecord)
 
         return {

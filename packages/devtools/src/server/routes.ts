@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
 import type { StelloAgent, StelloAgentHotConfig } from '@stello-ai/core'
-import type { LLMConfigProvider, PromptProvider, SessionAccessProvider, ToolsProvider, SkillsProvider, IntegrationProvider } from './types.js'
+import type { LLMConfigProvider, PromptProvider, SessionAccessProvider, ToolsProvider, SkillsProvider, IntegrationProvider, DevtoolsPersistedState, DevtoolsStateStore } from './types.js'
 
 /** 让主 session 固定排第一，其余保持原始顺序 */
 async function orderSessionsWithMainFirst(agent: StelloAgent) {
@@ -86,6 +86,69 @@ function serializeConfig(agent: StelloAgent) {
   }
 }
 
+/** 提取可持久化的热更新配置子集。 */
+function serializeHotConfig(agent: StelloAgent): StelloAgentHotConfig {
+  const config = agent.config
+  const schedulerConfig = config.orchestration?.scheduler?.getConfig?.()
+  const splitGuardConfig = config.orchestration?.splitGuard?.getConfig?.()
+
+  return {
+    runtime: {
+      idleTtlMs: config.runtime?.recyclePolicy?.idleTtlMs ?? 0,
+    },
+    scheduling: {
+      consolidation: schedulerConfig?.consolidation ?? { trigger: 'manual' },
+      integration: schedulerConfig?.integration ?? { trigger: 'manual' },
+    },
+    splitGuard: splitGuardConfig ?? undefined,
+  }
+}
+
+/** 组装当前 DevTools 的可持久化状态。 */
+function buildPersistedState(
+  agent: StelloAgent,
+  llmProvider?: LLMConfigProvider,
+  promptProvider?: PromptProvider,
+  toolsProvider?: ToolsProvider,
+  skillsProvider?: SkillsProvider,
+): DevtoolsPersistedState {
+  return {
+    hotConfig: serializeHotConfig(agent),
+    llm: llmProvider
+      ? (() => {
+          const llm = llmProvider.getConfig()
+          return {
+            model: llm.model,
+            baseURL: llm.baseURL,
+            temperature: llm.temperature,
+            maxTokens: llm.maxTokens,
+          }
+        })()
+      : undefined,
+    prompts: promptProvider?.getPrompts(),
+    disabledTools: toolsProvider?.getTools().filter((tool) => !tool.enabled).map((tool) => tool.name) ?? [],
+    disabledSkills: skillsProvider?.getSkills().filter((skill) => !skill.enabled).map((skill) => skill.name) ?? [],
+  }
+}
+
+/** 非流式 turn 的 tool call 展示项。 */
+interface TurnToolCallDetail {
+  id: string
+  name: string
+  args: Record<string, unknown>
+  success?: boolean
+  data?: unknown
+  error?: string | null
+  duration?: number
+}
+
+type AgentTurnResponse = Awaited<ReturnType<StelloAgent['turn']>>
+type DevtoolsTurnResponse = Omit<AgentTurnResponse, 'turn'> & {
+  turn: AgentTurnResponse['turn'] & {
+    toolCalls?: TurnToolCallDetail[]
+  }
+}
+
 /** 创建 DevTools REST 路由 */
 export function createRoutes(
   agent: StelloAgent,
@@ -97,6 +160,7 @@ export function createRoutes(
   toolsProvider?: ToolsProvider,
   skillsProvider?: SkillsProvider,
   integrationProvider?: IntegrationProvider,
+  stateStore?: DevtoolsStateStore,
 ): Hono {
   const app = new Hono()
   withErrorHandler(app)
@@ -243,8 +307,41 @@ export function createRoutes(
   app.post('/sessions/:id/turn', async (c) => {
     const id = c.req.param('id')
     const { input } = await c.req.json<{ input: string }>()
-    const result = await agent.turn(id, input)
-    return c.json(result)
+    const toolCallTimers = new Map<string, number>()
+    const toolCalls: TurnToolCallDetail[] = []
+    const result = await agent.turn(id, input, {
+      onToolCall: (toolCall) => {
+        const callId = toolCall.id ?? toolCall.name
+        toolCallTimers.set(callId, Date.now())
+        toolCalls.push({
+          id: callId,
+          name: toolCall.name,
+          args: toolCall.args,
+        })
+      },
+      onToolResult: (toolResult) => {
+        const callId = toolResult.toolCallId ?? toolResult.toolName
+        const startTime = toolCallTimers.get(callId)
+        const duration = startTime ? Date.now() - startTime : undefined
+        toolCallTimers.delete(callId)
+        const target = toolCalls.find((toolCall) => toolCall.id === callId)
+        if (!target) return
+        target.success = toolResult.success
+        target.data = toolResult.data
+        target.error = toolResult.error
+        target.duration = duration
+      },
+    })
+    const response: DevtoolsTurnResponse = toolCalls.length > 0
+      ? {
+          ...result,
+          turn: {
+            ...result.turn,
+            toolCalls,
+          },
+        }
+      : result
+    return c.json(response)
   })
 
   /** 离开 session */
@@ -319,6 +416,9 @@ export function createRoutes(
     if (body.splitGuard) patch.splitGuard = body.splitGuard
 
     agent.updateConfig(patch)
+    if (stateStore) {
+      await stateStore.save(buildPersistedState(agent, llmProvider, promptProvider, toolsProvider, skillsProvider))
+    }
     onEvent?.({ type: 'config.updated', data: body as Record<string, unknown> })
 
     return c.json({ ok: true, config: serializeConfig(agent) })
@@ -351,6 +451,9 @@ export function createRoutes(
       temperature: body.temperature ?? current.temperature,
       maxTokens: body.maxTokens ?? current.maxTokens,
     })
+    if (stateStore) {
+      await stateStore.save(buildPersistedState(agent, llmProvider, promptProvider, toolsProvider, skillsProvider))
+    }
     onEvent?.({
       type: 'llm.updated',
       data: {
@@ -360,7 +463,7 @@ export function createRoutes(
         maxTokens: body.maxTokens,
       },
     })
-    return c.json({ ok: true, ...llmProvider.getConfig() })
+    return c.json({ ok: true, configured: true, ...llmProvider.getConfig() })
   })
 
   /** 获取 Consolidation/Integration 提示词 */
@@ -374,8 +477,11 @@ export function createRoutes(
     if (!promptProvider) return c.json({ error: 'Prompt provider not configured' }, 400)
     const body = await c.req.json<{ consolidate?: string; integrate?: string }>()
     promptProvider.setPrompts(body)
+    if (stateStore) {
+      await stateStore.save(buildPersistedState(agent, llmProvider, promptProvider, toolsProvider, skillsProvider))
+    }
     onEvent?.({ type: 'prompts.updated' })
-    return c.json({ ok: true, ...promptProvider.getPrompts() })
+    return c.json({ ok: true, configured: true, ...promptProvider.getPrompts() })
   })
 
   /** 获取 session 的 system prompt */
@@ -394,6 +500,44 @@ export function createRoutes(
     if (typeof content !== 'string') return c.json({ error: 'content must be a string' }, 400)
     await sessionAccessProvider.setSystemPrompt(id, content)
     onEvent?.({ type: 'system-prompt.updated', sessionId: id })
+    return c.json({ ok: true })
+  })
+
+  /** 获取 session 的 consolidate prompt */
+  app.get('/sessions/:id/consolidate-prompt', async (c) => {
+    if (!sessionAccessProvider?.getConsolidatePrompt) return c.json({ configured: false, content: null })
+    const id = c.req.param('id')
+    const content = await sessionAccessProvider.getConsolidatePrompt(id)
+    return c.json({ configured: true, content })
+  })
+
+  /** 更新 session 的 consolidate prompt */
+  app.put('/sessions/:id/consolidate-prompt', async (c) => {
+    if (!sessionAccessProvider?.setConsolidatePrompt) return c.json({ error: 'Consolidate prompt editing not configured' }, 400)
+    const id = c.req.param('id')
+    const { content } = await c.req.json<{ content: string }>()
+    if (typeof content !== 'string') return c.json({ error: 'content must be a string' }, 400)
+    await sessionAccessProvider.setConsolidatePrompt(id, content)
+    onEvent?.({ type: 'consolidate-prompt.updated', sessionId: id })
+    return c.json({ ok: true })
+  })
+
+  /** 获取 session 的 integrate prompt */
+  app.get('/sessions/:id/integrate-prompt', async (c) => {
+    if (!sessionAccessProvider?.getIntegratePrompt) return c.json({ configured: false, content: null })
+    const id = c.req.param('id')
+    const content = await sessionAccessProvider.getIntegratePrompt(id)
+    return c.json({ configured: true, content })
+  })
+
+  /** 更新 session 的 integrate prompt */
+  app.put('/sessions/:id/integrate-prompt', async (c) => {
+    if (!sessionAccessProvider?.setIntegratePrompt) return c.json({ error: 'Integrate prompt editing not configured' }, 400)
+    const id = c.req.param('id')
+    const { content } = await c.req.json<{ content: string }>()
+    if (typeof content !== 'string') return c.json({ error: 'content must be a string' }, 400)
+    await sessionAccessProvider.setIntegratePrompt(id, content)
+    onEvent?.({ type: 'integrate-prompt.updated', sessionId: id })
     return c.json({ ok: true })
   })
 
@@ -438,6 +582,9 @@ export function createRoutes(
     const name = c.req.param('name')
     const { enabled } = await c.req.json<{ enabled: boolean }>()
     toolsProvider.setEnabled(name, enabled)
+    if (stateStore) {
+      await stateStore.save(buildPersistedState(agent, llmProvider, promptProvider, toolsProvider, skillsProvider))
+    }
     onEvent?.({ type: 'tool.toggled', data: { name, enabled } })
     return c.json({ ok: true, tools: toolsProvider.getTools() })
   })
@@ -454,6 +601,9 @@ export function createRoutes(
     const name = c.req.param('name')
     const { enabled } = await c.req.json<{ enabled: boolean }>()
     skillsProvider.setEnabled(name, enabled)
+    if (stateStore) {
+      await stateStore.save(buildPersistedState(agent, llmProvider, promptProvider, toolsProvider, skillsProvider))
+    }
     onEvent?.({ type: 'skill.toggled', data: { name, enabled } })
     return c.json({ ok: true, skills: skillsProvider.getSkills() })
   })

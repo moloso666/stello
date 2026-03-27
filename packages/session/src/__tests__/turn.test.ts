@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import { makeSession, createMockLLM } from './helpers.js'
 import { SessionArchivedError } from '../types/session-api.js'
-import type { LLMResult } from '../types/llm.js'
+import type { LLMResult, Message } from '../types/llm.js'
 
 describe('send() 契约', () => {
   const simpleResponse: LLMResult = {
@@ -83,6 +83,68 @@ describe('send() 契约', () => {
     expect(result.content).toBeNull()
     expect(result.toolCalls).toHaveLength(1)
     expect(result.toolCalls![0]!.name).toBe('search')
+  })
+
+  it('send() 返回 toolCalls 时会把 assistant toolCalls 写入 L3', async () => {
+    const responseWithTools: LLMResult = {
+      content: '',
+      toolCalls: [{ id: 'tc_1', name: 'search', input: { q: 'test' } }],
+    }
+    const llm = createMockLLM([responseWithTools])
+    const { session } = await makeSession({ llm })
+
+    await session.send('搜索 test')
+
+    const messages = await session.messages()
+    expect(messages).toHaveLength(2)
+    expect(messages[1]!.role).toBe('assistant')
+    expect(messages[1]!.toolCalls).toEqual([{ id: 'tc_1', name: 'search', input: { q: 'test' } }])
+  })
+
+  it('toolResults continuation 会回放 assistant toolCalls 和 tool 消息', async () => {
+    const capturedMessages: Message[][] = []
+    const llm = createMockLLM([
+      {
+        content: '',
+        toolCalls: [{ id: 'tc_1', name: 'search', input: { q: 'test' } }],
+      },
+      {
+        content: '最终答案',
+      },
+    ])
+    const originalComplete = llm.complete.bind(llm)
+    llm.complete = async (msgs, options) => {
+      capturedMessages.push(msgs.map((msg) => ({ ...msg })))
+      return originalComplete(msgs, options)
+    }
+
+    const { session } = await makeSession({ llm })
+    await session.send('搜索 test')
+    await session.send(JSON.stringify({
+      toolResults: [{
+        toolCallId: 'tc_1',
+        toolName: 'search',
+        args: { q: 'test' },
+        success: true,
+        data: { hits: 3 },
+        error: null,
+      }],
+    }))
+
+    const secondCall = capturedMessages[1]!
+    expect(secondCall[0]).toMatchObject({ role: 'user', content: '搜索 test' })
+    expect(secondCall[1]).toMatchObject({
+      role: 'assistant',
+      content: '',
+      toolCalls: [{ id: 'tc_1', name: 'search', input: { q: 'test' } }],
+    })
+    expect(secondCall[2]).toMatchObject({
+      role: 'tool',
+      toolCallId: 'tc_1',
+    })
+
+    const persisted = await session.messages()
+    expect(persisted.map((message) => message.role)).toEqual(['user', 'assistant', 'tool', 'assistant'])
   })
 
   it('send() 会把 tools 定义传给 LLMAdapter.complete', async () => {

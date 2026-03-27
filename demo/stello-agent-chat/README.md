@@ -23,7 +23,7 @@ export OPENAI_MODEL=MiniMax-M1
 在仓库根目录执行：
 
 ```bash
-pnpm demo:chat
+node --import tsx demo/stello-agent-chat/chat-devtools.ts
 ```
 
 默认会启动 DevTools：
@@ -37,13 +37,13 @@ http://127.0.0.1:4800
 ```bash
 export DEMO_HOST=127.0.0.1
 export DEVTOOLS_PORT=4800
-pnpm demo:chat
+node --import tsx demo/stello-agent-chat/chat-devtools.ts
 ```
 
-如果你想直接跑入口文件：
+如果你想用根目录脚本：
 
 ```bash
-node --import tsx demo/stello-agent-chat/chat-devtools.ts
+pnpm demo:chat
 ```
 
 ## DevTools 功能
@@ -65,24 +65,44 @@ node --import tsx demo/stello-agent-chat/chat-devtools.ts
 - `Read-only Bootstrap`
   - 展示启动时接线和能力状态，用于观察，不用于热更新
 
+当前 demo 还会把一部分调试状态持久化到本地：
+
+- DevTools 全局状态：LLM、全局 prompts、tools/skills 开关、hot config
+- session 级 system prompt 编辑
+
+默认持久化目录：
+
+```text
+./tmp/stello-agent-chat
+```
+
 ## 对话里创建子 session
 
 你可以直接在聊天框里输入类似：
 
 ```text
-帮我创建一个子session，名字叫 UI Exploration，作用域是 ui
+帮我创建一个子 session，名字叫美国选校，并给它一个只负责美国选校的系统提示词
 ```
 
 或者：
 
 ```text
-创建一个子会话，名字叫 Landing Page
+创建一个子会话，名字叫英国选校，并让它先从“英国 CS 硕士申请”开始分析
 ```
+
+当前 `stello_create_session` 走的是 `@stello-ai/session` 内置的 `createSessionTool` 语义，模型调用时主要使用这些字段：
+
+- `label`
+  - 子会话显示名称
+- `systemPrompt`
+  - 子会话系统提示词；不提供时继承父会话
+- `prompt`
+  - demo 中会作为子会话的第一条 assistant 开场消息，用来让新会话立即进入某个具体任务
 
 现在这条链已经走真实 tool call：
 
 - 模型调用 `stello_create_session`
-- engine 执行 `forkSession`
+- 工具内部通过 `session.fork()` 派生子 session
 - 前端把 tool 调用过程渲染成单独组件
 - integration 会基于已有 L2 生成定向 insights，并写回子 session
 
@@ -101,7 +121,13 @@ node --import tsx demo/stello-agent-chat/chat-devtools.ts
 如果你只想验证装配是否成功，不想真的监听端口，可以：
 
 ```bash
-DEMO_DRY_RUN=1 pnpm demo:chat
+DEMO_DRY_RUN=1 node --import tsx demo/stello-agent-chat/chat-devtools.ts
+```
+
+或直接：
+
+```bash
+OPENAI_API_KEY=fake DEMO_DRY_RUN=1 node --import tsx demo/stello-agent-chat/chat-devtools.ts
 ```
 
 这会完成：
