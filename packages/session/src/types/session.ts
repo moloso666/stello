@@ -37,7 +37,7 @@ export interface ForkOptions {
   systemPrompt?: string
   /** 上下文策略：'none'(默认) 空 L3；'inherit' 拷贝父 L3；函数则自定义转换 */
   context?: 'none' | 'inherit' | ForkContextFn
-  /** 子 Session 的第一条用户消息 */
+  /** 子 Session 的第一条 assistant 开场消息 */
   prompt?: string
   /** 覆盖父 Session 的 LLM 适配器 */
   llm?: LLMAdapter

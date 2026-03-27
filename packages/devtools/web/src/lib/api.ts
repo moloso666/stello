@@ -83,6 +83,15 @@ export interface TurnResult {
     toolRoundCount: number
     toolCallsExecuted: number
     rawResponse: string
+    toolCalls?: Array<{
+      id: string
+      name: string
+      args: Record<string, unknown>
+      success?: boolean
+      data?: unknown
+      error?: string | null
+      duration?: number
+    }>
   }
 }
 

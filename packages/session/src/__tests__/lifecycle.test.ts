@@ -170,12 +170,12 @@ describe('updateMeta() + archive() + fork()', () => {
   })
 
   describe('fork() prompt', () => {
-    it('prompt 写入子 L3 第一条用户消息', async () => {
+    it('prompt 写入子 L3 第一条 assistant 开场消息', async () => {
       const { session } = await makeSession()
       const child = await session.fork({ label: 'Child', prompt: '开始调研' })
       const childMessages = await child.messages()
       expect(childMessages).toHaveLength(1)
-      expect(childMessages[0]!.role).toBe('user')
+      expect(childMessages[0]!.role).toBe('assistant')
       expect(childMessages[0]!.content).toBe('开始调研')
     })
 
@@ -192,7 +192,7 @@ describe('updateMeta() + archive() + fork()', () => {
       expect(childMessages).toHaveLength(3)
       expect(childMessages[0]!.content).toBe('hello')
       expect(childMessages[1]!.content).toBe('reply')
-      expect(childMessages[2]!.role).toBe('user')
+      expect(childMessages[2]!.role).toBe('assistant')
       expect(childMessages[2]!.content).toBe('继续')
     })
   })

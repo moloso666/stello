@@ -327,11 +327,6 @@ function screenToWorld(sx: number, sy: number, cam: Camera): { wx: number; wy: n
   return { wx: sx / cam.zoom - cam.x, wy: sy / cam.zoom - cam.y }
 }
 
-/** 世界坐标 → 屏幕坐标 */
-function worldToScreen(wx: number, wy: number, cam: Camera): { sx: number; sy: number } {
-  return { sx: (wx + cam.x) * cam.zoom, sy: (wy + cam.y) * cam.zoom }
-}
-
 /** Topology 星空图页面 */
 export function Topology() {
   const containerRef = useRef<HTMLDivElement>(null)

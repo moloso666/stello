@@ -2,7 +2,6 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { InteractionHandler } from '../interaction-handler';
-import type { InteractionCallbacks } from '../interaction-handler';
 import type { LayoutNode } from '../../types';
 
 function makeNode(overrides: Partial<LayoutNode> = {}): LayoutNode {

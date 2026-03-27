@@ -2,6 +2,8 @@
 export interface Message {
   role: 'system' | 'user' | 'assistant' | 'tool'
   content: string
+  /** assistant 发起的工具调用列表，仅 role=assistant 时有效 */
+  toolCalls?: ToolCall[]
   /** 关联的工具调用 ID，仅 role=tool 时有效 */
   toolCallId?: string
   /** 消息写入时间（ISO 字符串） */

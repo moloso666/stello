@@ -92,7 +92,51 @@ describe('devtools REST routes', () => {
       body: JSON.stringify({ input: 'hello' }),
     })
     expect(res.status).toBe(200)
-    expect(agent.turn).toHaveBeenCalledWith('sess-1', 'hello')
+    expect(agent.turn).toHaveBeenCalledWith(
+      'sess-1',
+      'hello',
+      expect.objectContaining({
+        onToolCall: expect.any(Function),
+        onToolResult: expect.any(Function),
+      }),
+    )
+  })
+
+  it('POST /sessions/:id/turn 返回非流式 tool call 明细', async () => {
+    const agent = createMockAgent()
+    agent.turn = vi.fn().mockImplementation(async (_sessionId: string, _input: string, options?: {
+      onToolCall?: (toolCall: { id?: string; name: string; args: Record<string, unknown> }) => void
+      onToolResult?: (result: { toolCallId: string | null; toolName: string; success: boolean; data: unknown; error: string | null }) => void
+    }) => {
+      options?.onToolCall?.({ id: 'call_1', name: 'search', args: { query: 'cs master us' } })
+      options?.onToolResult?.({ toolCallId: 'call_1', toolName: 'search', success: true, data: { hits: 3 }, error: null })
+      return { turn: { finalContent: 'done', toolRoundCount: 1, toolCallsExecuted: 1, rawResponse: 'done' } }
+    })
+    const app = new Hono()
+    app.route('/api', createRoutes(agent as never))
+
+    const res = await app.request('/api/sessions/sess-1/turn', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ input: 'hello' }),
+    })
+    expect(res.status).toBe(200)
+    const body = await res.json() as {
+      turn: {
+        toolCalls?: Array<{ id: string; name: string; args: Record<string, unknown>; success?: boolean; data?: unknown }>
+      }
+    }
+    expect(body.turn.toolCalls).toEqual([
+      {
+        id: 'call_1',
+        name: 'search',
+        args: { query: 'cs master us' },
+        success: true,
+        data: { hits: 3 },
+        error: null,
+        duration: expect.any(Number),
+      },
+    ])
   })
 
   it('POST /sessions/:id/fork 调用 agent.forkSession', async () => {

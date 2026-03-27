@@ -131,6 +131,24 @@ function buildPersistedState(
   }
 }
 
+/** 非流式 turn 的 tool call 展示项。 */
+interface TurnToolCallDetail {
+  id: string
+  name: string
+  args: Record<string, unknown>
+  success?: boolean
+  data?: unknown
+  error?: string | null
+  duration?: number
+}
+
+type AgentTurnResponse = Awaited<ReturnType<StelloAgent['turn']>>
+type DevtoolsTurnResponse = Omit<AgentTurnResponse, 'turn'> & {
+  turn: AgentTurnResponse['turn'] & {
+    toolCalls?: TurnToolCallDetail[]
+  }
+}
+
 /** 创建 DevTools REST 路由 */
 export function createRoutes(
   agent: StelloAgent,
@@ -289,8 +307,41 @@ export function createRoutes(
   app.post('/sessions/:id/turn', async (c) => {
     const id = c.req.param('id')
     const { input } = await c.req.json<{ input: string }>()
-    const result = await agent.turn(id, input)
-    return c.json(result)
+    const toolCallTimers = new Map<string, number>()
+    const toolCalls: TurnToolCallDetail[] = []
+    const result = await agent.turn(id, input, {
+      onToolCall: (toolCall) => {
+        const callId = toolCall.id ?? toolCall.name
+        toolCallTimers.set(callId, Date.now())
+        toolCalls.push({
+          id: callId,
+          name: toolCall.name,
+          args: toolCall.args,
+        })
+      },
+      onToolResult: (toolResult) => {
+        const callId = toolResult.toolCallId ?? toolResult.toolName
+        const startTime = toolCallTimers.get(callId)
+        const duration = startTime ? Date.now() - startTime : undefined
+        toolCallTimers.delete(callId)
+        const target = toolCalls.find((toolCall) => toolCall.id === callId)
+        if (!target) return
+        target.success = toolResult.success
+        target.data = toolResult.data
+        target.error = toolResult.error
+        target.duration = duration
+      },
+    })
+    const response: DevtoolsTurnResponse = toolCalls.length > 0
+      ? {
+          ...result,
+          turn: {
+            ...result.turn,
+            toolCalls,
+          },
+        }
+      : result
+    return c.json(response)
   })
 
   /** 离开 session */

@@ -81,19 +81,28 @@ pnpm demo:chat
 你可以直接在聊天框里输入类似：
 
 ```text
-帮我创建一个子session，名字叫 UI Exploration，作用域是 ui
+帮我创建一个子 session，名字叫美国选校，并给它一个只负责美国选校的系统提示词
 ```
 
 或者：
 
 ```text
-创建一个子会话，名字叫 Landing Page
+创建一个子会话，名字叫英国选校，并让它先从“英国 CS 硕士申请”开始分析
 ```
+
+当前 `stello_create_session` 走的是 `@stello-ai/session` 内置的 `createSessionTool` 语义，模型调用时主要使用这些字段：
+
+- `label`
+  - 子会话显示名称
+- `systemPrompt`
+  - 子会话系统提示词；不提供时继承父会话
+- `prompt`
+  - demo 中会作为子会话的第一条 assistant 开场消息，用来让新会话立即进入某个具体任务
 
 现在这条链已经走真实 tool call：
 
 - 模型调用 `stello_create_session`
-- engine 执行 `forkSession`
+- 工具内部通过 `session.fork()` 派生子 session
 - 前端把 tool 调用过程渲染成单独组件
 - integration 会基于已有 L2 生成定向 insights，并写回子 session
 

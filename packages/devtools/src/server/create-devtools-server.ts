@@ -1,7 +1,7 @@
 import { readFileSync, existsSync } from 'node:fs'
 import { resolve, join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import type { Server as HttpServer, IncomingMessage, ServerResponse } from 'node:http'
+import type { Server as HttpServer } from 'node:http'
 import { Hono } from 'hono'
 import type { StelloAgent } from '@stello-ai/core'
 import { createRoutes } from './routes.js'
@@ -52,7 +52,7 @@ const MIME: Record<string, string> = {
 /** 从 webDir serve 静态文件的 Hono 中间件 */
 function createStaticMiddleware(webDir: string) {
   return async (c: { req: { path: string }; body: (data: string | null, init?: ResponseInit) => Response; notFound: () => Response }) => {
-    let filePath = c.req.path === '/' ? '/index.html' : c.req.path
+    const filePath = c.req.path === '/' ? '/index.html' : c.req.path
     const fullPath = join(webDir, filePath)
 
     /* 安全检查：不能跳出 webDir */

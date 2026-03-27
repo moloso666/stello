@@ -41,7 +41,7 @@ describe('PgMainStorage', () => {
     it('只返回有 L2 的 active standard sessions', async () => {
       const mainId = await insertSession({ role: 'main', label: 'Main' })
       const s1 = await insertSession({ label: 'S1', parentId: mainId })
-      const s2 = await insertSession({ label: 'S2', parentId: mainId })
+      await insertSession({ label: 'S2', parentId: mainId })
       const archived = await insertSession({ label: 'Archived', status: 'archived', parentId: mainId })
 
       // 给 s1 和 archived 写 memory

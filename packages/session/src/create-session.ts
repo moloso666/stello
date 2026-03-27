@@ -1,10 +1,119 @@
 import { randomUUID } from 'node:crypto'
 import type { Session, MessageQueryOptions } from './types/session-api.js'
-import { SessionArchivedError, NotImplementedError } from './types/session-api.js'
+import { SessionArchivedError } from './types/session-api.js'
 import type { SessionMeta, SessionMetaUpdate, ForkOptions } from './types/session.js'
 import type { Message } from './types/llm.js'
 import type { ConsolidateFn, CreateSessionOptions, LoadSessionOptions, SendResult, StreamResult } from './types/functions.js'
 import { assembleSessionContext } from './context-utils.js'
+
+interface ToolResultEnvelope {
+  toolResults: Array<{
+    toolCallId: string | null
+    toolName: string
+    args: Record<string, unknown>
+    success: boolean
+    data: unknown
+    error: string | null
+  }>
+}
+
+/** 判断输入是否是 TurnRunner 回灌的 toolResults 包。 */
+function parseToolResultEnvelope(content: string): ToolResultEnvelope | null {
+  try {
+    const parsed = JSON.parse(content) as Partial<ToolResultEnvelope>
+    if (!Array.isArray(parsed.toolResults)) return null
+    return {
+      toolResults: parsed.toolResults.map((item) => ({
+        toolCallId: typeof item?.toolCallId === 'string' ? item.toolCallId : null,
+        toolName: typeof item?.toolName === 'string' ? item.toolName : 'unknown_tool',
+        args: typeof item?.args === 'object' && item.args ? item.args : {},
+        success: Boolean(item?.success),
+        data: item?.data ?? null,
+        error: typeof item?.error === 'string' ? item.error : null,
+      })),
+    }
+  } catch {
+    return null
+  }
+}
+
+/** 把 tool 执行结果序列化成可回放的 tool message 内容。 */
+function serializeToolResultContent(result: ToolResultEnvelope['toolResults'][number]): string {
+  return JSON.stringify({
+    toolName: result.toolName,
+    args: result.args,
+    success: result.success,
+    data: result.data,
+    error: result.error,
+  })
+}
+
+/** 根据当前输入构造发给 LLM 的消息和待持久化记录。 */
+function buildInputMessages(
+  history: Message[],
+  content: string,
+  timestamp: string,
+): { promptMessages: Message[]; recordsToPersist: Message[] } {
+  const toolEnvelope = parseToolResultEnvelope(content)
+  const lastAssistant = history.at(-1)
+  const canReplayToolResults = (
+    toolEnvelope &&
+    lastAssistant?.role === 'assistant' &&
+    Array.isArray(lastAssistant.toolCalls) &&
+    lastAssistant.toolCalls.length > 0
+  )
+
+  if (canReplayToolResults) {
+    const toolMessages: Message[] = toolEnvelope.toolResults.map((result) => ({
+      role: 'tool',
+      toolCallId: result.toolCallId ?? undefined,
+      content: serializeToolResultContent(result),
+      timestamp,
+    }))
+    return {
+      promptMessages: [...history, ...toolMessages],
+      recordsToPersist: toolMessages,
+    }
+  }
+
+  const userRecord: Message = { role: 'user', content, timestamp }
+  return {
+    promptMessages: [...history, userRecord],
+    recordsToPersist: [userRecord],
+  }
+}
+
+/** 为 toolResults continuation 组装固定上下文与历史。 */
+async function assembleSessionReplayContext(
+  sessionId: string,
+  storage: CreateSessionOptions['storage'] | LoadSessionOptions['storage'],
+  contextWindow: CreateSessionOptions['contextWindow'] | LoadSessionOptions['contextWindow'],
+): Promise<{ messages: Message[]; insightConsumed: boolean }> {
+  const messages: Message[] = []
+  let insightConsumed = false
+
+  const sysPrompt = await storage.getSystemPrompt(sessionId)
+  if (sysPrompt) {
+    messages.push({ role: 'system', content: sysPrompt })
+  }
+
+  const insightContent = await storage.getInsight(sessionId)
+  if (insightContent) {
+    messages.push({ role: 'system', content: insightContent })
+    insightConsumed = true
+  }
+
+  if (contextWindow) {
+    const memory = await storage.getMemory(sessionId)
+    if (memory) {
+      messages.push({ role: 'system', content: memory })
+    }
+  }
+
+  const history = await storage.listRecords(sessionId)
+  messages.push(...history)
+  return { messages, insightConsumed }
+}
 
 function createStreamResult(
   processor: (push: (chunk: string) => void) => Promise<SendResult>
@@ -83,17 +192,37 @@ function buildSession(
         await storage.clearInsight(currentMeta.id)
       }
 
-      // 调 LLM
-      const result = await options.llm.complete(messages, { tools })
+      let promptMessages = messages
+      let recordsToPersist: Message[] = [{ role: 'user', content, timestamp: userTimestamp }]
+      const toolEnvelope = parseToolResultEnvelope(content)
+      if (toolEnvelope) {
+        const replayContext = await assembleSessionReplayContext(currentMeta.id, storage, options.contextWindow)
+        promptMessages = [
+          ...replayContext.messages,
+          ...toolEnvelope.toolResults.map((result) => ({
+            role: 'tool' as const,
+            toolCallId: result.toolCallId ?? undefined,
+            content: serializeToolResultContent(result),
+            timestamp: userTimestamp,
+          })),
+        ]
+        recordsToPersist = promptMessages.slice(replayContext.messages.length)
+        if (replayContext.insightConsumed) {
+          await storage.clearInsight(currentMeta.id)
+        }
+      }
 
-      // 存 L3：用户消息 + assistant 响应
-      const userRecord: Message = { role: 'user', content, timestamp: userTimestamp }
+      // 调 LLM
+      const result = await options.llm.complete(promptMessages, { tools })
       const assistantRecord: Message = {
         role: 'assistant',
         content: result.content ?? '',
+        ...(result.toolCalls && result.toolCalls.length > 0 ? { toolCalls: result.toolCalls } : {}),
         timestamp: new Date().toISOString(),
       }
-      await storage.appendRecord(currentMeta.id, userRecord)
+      for (const record of recordsToPersist) {
+        await storage.appendRecord(currentMeta.id, record)
+      }
       await storage.appendRecord(currentMeta.id, assistantRecord)
 
       return {
@@ -122,7 +251,25 @@ function buildSession(
           await storage.clearInsight(currentMeta.id)
         }
 
-        const now = userTimestamp
+        let promptMessages = messages
+        let recordsToPersist: Message[] = [{ role: 'user', content, timestamp: userTimestamp }]
+        const toolEnvelope = parseToolResultEnvelope(content)
+        if (toolEnvelope) {
+          const replayContext = await assembleSessionReplayContext(currentMeta.id, storage, options.contextWindow)
+          promptMessages = [
+            ...replayContext.messages,
+            ...toolEnvelope.toolResults.map((result) => ({
+              role: 'tool' as const,
+              toolCallId: result.toolCallId ?? undefined,
+              content: serializeToolResultContent(result),
+              timestamp: userTimestamp,
+            })),
+          ]
+          recordsToPersist = promptMessages.slice(replayContext.messages.length)
+          if (replayContext.insightConsumed) {
+            await storage.clearInsight(currentMeta.id)
+          }
+        }
 
         if (!options.llm) {
           throw new Error('LLM adapter not set. Call setLLM() first or pass llm to createSession().')
@@ -132,7 +279,7 @@ function buildSession(
         if (options.llm.stream) {
           let accumulated = ''
           const toolCallsByIndex = new Map<number, { id?: string; name?: string; input: string }>()
-          for await (const chunk of options.llm.stream(messages, { tools })) {
+          for await (const chunk of options.llm.stream(promptMessages, { tools })) {
             accumulated += chunk.delta
             push(chunk.delta)
             for (const delta of chunk.toolCallDeltas ?? []) {
@@ -150,19 +297,21 @@ function buildSession(
           }))
           result = { content: accumulated, toolCalls }
         } else {
-          result = await options.llm.complete(messages, { tools })
+          result = await options.llm.complete(promptMessages, { tools })
           if (result.content) {
             push(result.content)
           }
         }
 
-        const userRecord: Message = { role: 'user', content, timestamp: now }
         const assistantRecord: Message = {
           role: 'assistant',
           content: result.content ?? '',
+          ...(result.toolCalls && result.toolCalls.length > 0 ? { toolCalls: result.toolCalls } : {}),
           timestamp: new Date().toISOString(),
         }
-        await storage.appendRecord(currentMeta.id, userRecord)
+        for (const record of recordsToPersist) {
+          await storage.appendRecord(currentMeta.id, record)
+        }
         await storage.appendRecord(currentMeta.id, assistantRecord)
 
         return {
@@ -256,10 +405,10 @@ function buildSession(
         }
       }
 
-      // 初始 prompt：写入子 Session 的第一条用户消息
+      // 初始 prompt：写入子 Session 的第一条 assistant 开场消息
       if (forkOptions.prompt) {
         await storage.appendRecord(childId, {
-          role: 'user',
+          role: 'assistant',
           content: forkOptions.prompt,
           timestamp: now,
         })

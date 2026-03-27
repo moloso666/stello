@@ -49,7 +49,7 @@ function createPoolOptions(overrides?: Partial<AgentPoolOptions>): AgentPoolOpti
           if (!session) throw new Error(`Session not found: ${sessionId}`)
           return session
         },
-        consolidateFn: async (currentMemory, messages) => {
+        consolidateFn: async (currentMemory) => {
           return currentMemory ?? 'consolidated'
         },
       },

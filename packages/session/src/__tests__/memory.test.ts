@@ -12,7 +12,7 @@ describe('memory() + consolidate()', () => {
     const { session, storage } = await makeSession()
     await storage.appendRecord(session.meta.id, { role: 'user', content: 'Hello' })
 
-    const fn: ConsolidateFn = async (_mem, _msgs) => 'Summarized memory'
+    const fn: ConsolidateFn = async () => 'Summarized memory'
     await session.consolidate(fn)
 
     expect(await session.memory()).toBe('Summarized memory')

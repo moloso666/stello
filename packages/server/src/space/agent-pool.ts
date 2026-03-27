@@ -140,8 +140,7 @@ export class AgentPool {
       // integrateFn 的 per-session 支持：获取 root session ID 作为 main session
       if (partialConfig.session.mainSessionResolver) {
         const mainSessionResolver = partialConfig.session.mainSessionResolver
-        const root = await sessionTree.getRoot()
-        const mainSessionId = root.id
+        await sessionTree.getRoot()
 
         partialConfig.orchestration = {
           ...partialConfig.orchestration,

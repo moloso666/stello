@@ -33,7 +33,7 @@ export type CoreSchema = Record<string, CoreSchemaField>;
  */
 export interface TurnRecord {
   /** 角色 */
-  role: 'user' | 'assistant' | 'system';
+  role: 'user' | 'assistant' | 'system' | 'tool';
   /** 内容 */
   content: string;
   /** 时间戳（ISO 8601） */
@@ -83,6 +83,8 @@ export interface MemoryEngine {
   writeIndex(sessionId: string, content: string): Promise<void>;
   /** 追加一条 L3 对话记录 */
   appendRecord(sessionId: string, record: TurnRecord): Promise<void>;
+  /** 覆盖某 Session 的全部 L3 对话记录 */
+  replaceRecords?(sessionId: string, records: TurnRecord[]): Promise<void>;
   /** 读取某 Session 的所有 L3 对话记录 */
   readRecords(sessionId: string): Promise<TurnRecord[]>;
   /** 按继承策略组装上下文 */

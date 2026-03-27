@@ -4,7 +4,7 @@ import { createSession } from '../create-session.js'
 import { InMemoryStorageAdapter } from '../mocks/in-memory-storage.js'
 import { SessionArchivedError } from '../types/session-api.js'
 import type { IntegrateFn } from '../types/functions.js'
-import type { LLMAdapter, LLMResult } from '../types/llm.js'
+import type { LLMAdapter, LLMResult, Message } from '../types/llm.js'
 
 /** 创建 mock LLMAdapter */
 function makeMockLLM(response: Partial<LLMResult> = {}): LLMAdapter {
@@ -78,7 +78,7 @@ describe('MainSession synthesis()', () => {
   it('integrate 后 synthesis 可读', async () => {
     const { main } = await makeWithChildren()
 
-    const fn: IntegrateFn = async (children, _current) => ({
+    const fn: IntegrateFn = async (children) => ({
       synthesis: `共 ${children.length} 个子任务`,
       insights: [],
     })
@@ -92,7 +92,7 @@ describe('MainSession integrate()', () => {
   it('IntegrateFn 接收所有子 Session 的 L2', async () => {
     const { main } = await makeWithChildren()
 
-    const fn = vi.fn<IntegrateFn>(async (children, _current) => ({
+    const fn = vi.fn<IntegrateFn>(async () => ({
       synthesis: 'ok',
       insights: [],
     }))
@@ -128,11 +128,11 @@ describe('MainSession integrate()', () => {
   it('insights 推送到子 Session', async () => {
     const { main, storage, child1, child2 } = await makeWithChildren()
 
-    await main.integrate(async (children) => ({
+    await main.integrate(async () => ({
       synthesis: 'overview',
       insights: [
-        { sessionId: children[0]!.sessionId, content: '加快进度' },
-        { sessionId: children[1]!.sessionId, content: 'DDL 临近' },
+        { sessionId: child1.meta.id, content: '加快进度' },
+        { sessionId: child2.meta.id, content: 'DDL 临近' },
       ],
     }))
 
@@ -199,6 +199,61 @@ describe('MainSession send()', () => {
     expect(result.content).toBe('hello back')
     expect(result.usage).toBeDefined()
     expect(llm.complete).toHaveBeenCalledTimes(1)
+  })
+
+  it('返回 toolCalls 时会把 assistant toolCalls 写入 L3', async () => {
+    const llm = makeMockLLM({
+      content: '',
+      toolCalls: [{ id: 'tc_1', name: 'search', input: { q: 'test' } }],
+    })
+    const { main } = await makeMainSession({ llm })
+
+    await main.send('搜索 test')
+
+    const messages = await main.messages()
+    expect(messages).toHaveLength(2)
+    expect(messages[1]!.role).toBe('assistant')
+    expect(messages[1]!.toolCalls).toEqual([{ id: 'tc_1', name: 'search', input: { q: 'test' } }])
+  })
+
+  it('toolResults continuation 会回放 assistant toolCalls 和 tool 消息', async () => {
+    const llm = {
+      complete: vi
+        .fn()
+        .mockResolvedValueOnce({
+          content: '',
+          toolCalls: [{ id: 'tc_1', name: 'search', input: { q: 'test' } }],
+        })
+        .mockResolvedValueOnce({
+          content: '最终答案',
+          usage: { promptTokens: 10, completionTokens: 5 },
+        }),
+    } satisfies LLMAdapter
+    const { main } = await makeMainSession({ llm })
+
+    await main.send('搜索 test')
+    await main.send(JSON.stringify({
+      toolResults: [{
+        toolCallId: 'tc_1',
+        toolName: 'search',
+        args: { q: 'test' },
+        success: true,
+        data: { hits: 2 },
+        error: null,
+      }],
+    }))
+
+    const secondCall = (llm.complete as ReturnType<typeof vi.fn>).mock.calls[1]![0] as Array<Message>
+    expect(secondCall[0]).toMatchObject({ role: 'user', content: '搜索 test' })
+    expect(secondCall[1]).toMatchObject({
+      role: 'assistant',
+      content: '',
+      toolCalls: [{ id: 'tc_1', name: 'search', input: { q: 'test' } }],
+    })
+    expect(secondCall[2]).toMatchObject({ role: 'tool', toolCallId: 'tc_1' })
+
+    const persisted = await main.messages()
+    expect(persisted.map((message) => message.role)).toEqual(['user', 'assistant', 'tool', 'assistant'])
   })
 
   it('自动存 L3（user + assistant）', async () => {

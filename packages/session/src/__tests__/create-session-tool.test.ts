@@ -31,14 +31,14 @@ describe('createSessionTool', () => {
     expect(sp).toBe('父提示词')
   })
 
-  it('传 prompt 写入子 Session 第一条消息', async () => {
+  it('传 prompt 写入子 Session 第一条 assistant 开场消息', async () => {
     const { session, storage } = await makeSession()
     const tool = createSessionTool(() => session)
     const result = await tool.execute({ label: 'Child', prompt: '开始工作' })
     const output = result.output as { sessionId: string }
     const records = await storage.listRecords(output.sessionId)
     expect(records).toHaveLength(1)
-    expect(records[0]!.role).toBe('user')
+    expect(records[0]!.role).toBe('assistant')
     expect(records[0]!.content).toBe('开始工作')
   })
 

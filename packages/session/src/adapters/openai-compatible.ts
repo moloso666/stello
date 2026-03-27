@@ -3,6 +3,10 @@ import type { ChatCompletion, ChatCompletionChunk } from 'openai/resources/chat/
 import type { Stream } from 'openai/streaming'
 import type { LLMAdapter, LLMResult, Message, LLMCompleteOptions } from '../types/llm.js'
 
+type ChatToolCallDelta = NonNullable<
+  NonNullable<ChatCompletionChunk['choices'][number]['delta']['tool_calls']>[number]
+>
+
 /** OpenAI 兼容协议的配置选项 */
 export interface OpenAICompatibleOptions {
   apiKey: string
@@ -38,8 +42,21 @@ export function createOpenAICompatibleAdapter(options: OpenAICompatibleOptions):
           }
         : {}),
       messages: messages.map((m) => ({
-        role: m.role as 'system' | 'user' | 'assistant',
+        role: m.role as 'system' | 'user' | 'assistant' | 'tool',
         content: m.content,
+        ...(m.role === 'tool' && m.toolCallId ? { tool_call_id: m.toolCallId } : {}),
+        ...(m.role === 'assistant' && m.toolCalls && m.toolCalls.length > 0
+          ? {
+              tool_calls: m.toolCalls.map((toolCall) => ({
+                id: toolCall.id,
+                type: 'function' as const,
+                function: {
+                  name: toolCall.name,
+                  arguments: JSON.stringify(toolCall.input),
+                },
+              })),
+            }
+          : {}),
       })),
     }
   }
@@ -81,7 +98,7 @@ export function createOpenAICompatibleAdapter(options: OpenAICompatibleOptions):
 
       for await (const chunk of stream) {
         const delta = chunk.choices[0]?.delta?.content ?? ''
-        const toolCallDeltas = (chunk.choices[0]?.delta?.tool_calls ?? []).map((call: any) => ({
+        const toolCallDeltas = (chunk.choices[0]?.delta?.tool_calls ?? []).map((call: ChatToolCallDelta) => ({
           index: call.index ?? 0,
           id: call.id,
           name: call.function?.name,

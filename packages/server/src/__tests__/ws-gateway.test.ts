@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, beforeEach, afterAll, afterEach } from 'vitest'
+import { describe, it, expect, beforeAll, beforeEach, afterAll } from 'vitest'
 import type pg from 'pg'
 import WebSocket from 'ws'
 import { createTestPool, setupDatabase, cleanDatabase, createTestUserWithKey } from './helpers.js'

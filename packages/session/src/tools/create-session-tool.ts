@@ -10,7 +10,7 @@ export function createSessionTool(getParent: () => Session) {
     {
       label: z.string().describe('子会话的显示名称'),
       systemPrompt: z.string().optional().describe('子会话的系统提示词，不提供则继承父会话'),
-      prompt: z.string().optional().describe('子会话的第一条用户消息'),
+      prompt: z.string().optional().describe('子会话的第一条 assistant 开场消息'),
     },
     async (input) => {
       const parent = getParent()

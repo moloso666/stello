@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { ChevronDown, ChevronRight, Pencil, ArrowDownRight, Loader2, Search, Filter, Save } from 'lucide-react'
 import { fetchSessions, fetchSessionDetail, fetchSystemPrompt, updateSystemPrompt, fetchConsolidatePrompt, updateConsolidatePrompt, fetchIntegratePrompt, updateIntegratePrompt, fetchScope, updateScope, injectRecord, consolidateSession, triggerIntegration, type SessionMeta, type SessionDetail } from '@/lib/api'
@@ -113,18 +113,12 @@ export function Inspector() {
   const [roleFilter, setRoleFilter] = useState<'all' | 'user' | 'assistant' | 'system'>('all')
   const [sysPrompt, setSysPrompt] = useState<string | null>(null)
   const [sysPromptConfigured, setSysPromptConfigured] = useState(false)
-  const [sysPromptEditing, setSysPromptEditing] = useState(false)
-  const [sysPromptDraft, setSysPromptDraft] = useState('')
-  const [sysPromptSaving, setSysPromptSaving] = useState(false)
   const [consolidatePrompt, setConsolidatePrompt] = useState<string | null>(null)
   const [consolidatePromptConfigured, setConsolidatePromptConfigured] = useState(false)
   const [integratePrompt, setIntegratePrompt] = useState<string | null>(null)
   const [integratePromptConfigured, setIntegratePromptConfigured] = useState(false)
   const [scopeContent, setScopeContent] = useState<string | null>(null)
   const [scopeConfigured, setScopeConfigured] = useState(false)
-  const [scopeEditing, setScopeEditing] = useState(false)
-  const [scopeDraft, setScopeDraft] = useState('')
-  const [scopeSaving, setScopeSaving] = useState(false)
   const [consolidating, setConsolidating] = useState(false)
   const [integrating, setIntegrating] = useState(false)
   const [injectOpen, setInjectOpen] = useState(false)
@@ -153,7 +147,6 @@ export function Inspector() {
   useEffect(() => {
     if (!selectedId) return
     setLoading(true)
-    setSysPromptEditing(false)
     fetchSessionDetail(selectedId)
       .then(setDetail)
       .catch(() => setDetail(null))

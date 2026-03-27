@@ -18,7 +18,7 @@ import {
   XCircle,
   Clock,
 } from 'lucide-react'
-import { fetchSessions, fetchConfig, fetchSessionDetail, enterSession, consolidateSession, type AgentConfig, type SessionDetail } from '@/lib/api'
+import { fetchSessions, fetchConfig, fetchSessionDetail, enterSession, consolidateSession, sendTurn, type AgentConfig, type SessionDetail } from '@/lib/api'
 import { useI18n } from '@/lib/i18n'
 
 /** 可点击的 Tool/Skill badge，展开显示详情列表 */
@@ -139,6 +139,12 @@ function MarkdownMessage({ text, streaming }: { text: string; streaming?: boolea
 
   return (
     <div className="space-y-2">
+      {streaming && !displayText && (
+        <div className="flex items-center gap-2 text-[12px] text-text-secondary">
+          <Loader2 size={14} className="animate-spin text-primary" />
+          <span>{t('common.loading')}</span>
+        </div>
+      )}
       {think && (
         <details className="group">
           <summary className="text-[10px] text-text-muted cursor-pointer hover:text-text-secondary transition-colors">
@@ -152,7 +158,6 @@ function MarkdownMessage({ text, streaming }: { text: string; streaming?: boolea
       <div className="prose-sm max-w-none text-text [&_p]:my-1 [&_p]:text-[13px] [&_p]:leading-relaxed [&_p]:text-text [&_ul]:my-1 [&_ol]:my-1 [&_li]:text-[13px] [&_li]:text-text [&_strong]:text-text [&_strong]:font-semibold [&_h1]:text-base [&_h1]:text-text [&_h1]:font-semibold [&_h2]:text-sm [&_h2]:text-text [&_h3]:text-[13px] [&_h3]:text-text [&_code]:text-[11px] [&_code]:bg-surface [&_code]:text-primary-dark [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded [&_pre]:bg-[#2a2520] [&_pre]:text-[#e5e4e1] [&_pre]:rounded-lg [&_pre]:p-3 [&_pre]:text-[11px] [&_pre_code]:bg-transparent [&_pre_code]:p-0 [&_pre_code]:text-[#e5e4e1] [&_blockquote]:border-l-2 [&_blockquote]:border-primary/30 [&_blockquote]:pl-3 [&_blockquote]:text-text-secondary [&_a]:text-primary [&_a]:underline [&_table]:text-[12px] [&_th]:px-2 [&_th]:py-1 [&_td]:px-2 [&_td]:py-1 [&_th]:bg-surface [&_th]:border-b [&_th]:border-border [&_hr]:border-border">
         <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]}>{displayText}</ReactMarkdown>
       </div>
-      {streaming && <span className="inline-block w-1.5 h-4 bg-primary/60 animate-pulse rounded-sm" />}
     </div>
   )
 }
@@ -331,7 +336,7 @@ export function Conversation() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [selectedSession, messages])
 
-  /** 发送消息——NDJSON 流式输出 */
+  /** 发送消息——统一走非流式 turn，发送期间显示加载占位。 */
   const handleSend = async () => {
     const text = inputValue.trim()
     if (!text || !selectedSession || sendingSessions.has(selectedSession.id)) return
@@ -349,84 +354,26 @@ export function Conversation() {
     try {
       /* enter session */
       await enterSession(selectedSession.id).catch(() => {})
-
-      /* 流式请求——用 demo server 的 /stream NDJSON 端点 */
-      const res = await fetch(`/api/sessions/${selectedSession.id}/stream`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ input: text }),
-      })
-
-      if (!res.ok || !res.body) {
-        /* fallback REST turn */
-        const turnRes = await fetch(`/api/sessions/${selectedSession.id}/turn`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ input: text }),
-        })
-        const result = await turnRes.json()
-        const content = result?.turn?.finalContent ?? result?.turn?.rawResponse ?? JSON.stringify(result)
-        setMessages((prev) => prev.map((m) => m.id === botId ? { ...m, content, streaming: false } : m))
-      } else {
-        /* 逐行读取 NDJSON */
-        const reader = res.body.getReader()
-        const decoder = new TextDecoder()
-        let buffer = ''
-        let fullContent = ''
-        const pendingToolCalls: ToolCallInfo[] = []
-
-        while (true) {
-          const { done, value } = await reader.read()
-          if (done) break
-          buffer += decoder.decode(value, { stream: true })
-          const lines = buffer.split('\n')
-          buffer = lines.pop() ?? ''
-
-          for (const line of lines) {
-            if (!line.trim()) continue
-            try {
-              const chunk = JSON.parse(line) as Record<string, unknown>
-              if (chunk['type'] === 'delta') {
-                const delta = String(chunk['delta'] ?? '')
-                fullContent += delta
-                setMessages((prev) => prev.map((m) => m.id === botId ? { ...m, content: fullContent } : m))
-              } else if (chunk['type'] === 'tool_call') {
-                const tc = chunk['toolCall'] as Record<string, unknown>
-                pendingToolCalls.push({
-                  id: String(tc['id'] ?? tc['name']),
-                  name: String(tc['name']),
-                  args: typeof tc['args'] === 'object' ? JSON.stringify(tc['args'], null, 2) : String(tc['args'] ?? ''),
-                })
-                setMessages((prev) => prev.map((m) => m.id === botId ? { ...m, toolCalls: [...pendingToolCalls] } : m))
-              } else if (chunk['type'] === 'tool_result') {
-                const tr = chunk['result'] as Record<string, unknown>
-                const callId = String(tr['toolCallId'] ?? tr['toolName'])
-                const idx = pendingToolCalls.findIndex((tc) => tc.id === callId)
-                if (idx >= 0) {
-                  pendingToolCalls[idx] = {
-                    ...pendingToolCalls[idx]!,
-                    success: tr['success'] as boolean,
-                    result: typeof tr['data'] === 'object' ? JSON.stringify(tr['data'], null, 2) : String(tr['data'] ?? ''),
-                    duration: tr['duration'] as number | undefined,
-                  }
-                  setMessages((prev) => prev.map((m) => m.id === botId ? { ...m, toolCalls: [...pendingToolCalls] } : m))
-                }
-              } else if (chunk['type'] === 'done') {
-                const result = chunk['result'] as Record<string, unknown> | undefined
-                const turn = result?.['turn'] as Record<string, unknown> | undefined
-                const finalContent = turn?.['finalContent'] ?? turn?.['rawResponse'] ?? fullContent
-                const turnStats: TurnStats | undefined = turn ? {
-                  toolRoundCount: (turn['toolRoundCount'] as number) ?? 0,
-                  toolCallsExecuted: (turn['toolCallsExecuted'] as number) ?? 0,
-                } : undefined
-                setMessages((prev) => prev.map((m) => m.id === botId ? { ...m, content: String(finalContent), streaming: false, toolCalls: pendingToolCalls.length > 0 ? [...pendingToolCalls] : m.toolCalls, turnStats } : m))
-              }
-            } catch { /* ignore parse error */ }
-          }
-        }
-        /* 确保 streaming 标记关闭 */
-        setMessages((prev) => prev.map((m) => m.id === botId ? { ...m, streaming: false } : m))
-      }
+      const result = await sendTurn(selectedSession.id, text)
+      const turn = result?.turn
+      const content = turn?.finalContent ?? turn?.rawResponse ?? JSON.stringify(result)
+      const turnStats: TurnStats | undefined = turn ? {
+        toolRoundCount: turn.toolRoundCount ?? 0,
+        toolCallsExecuted: turn.toolCallsExecuted ?? 0,
+      } : undefined
+      const toolCalls: ToolCallInfo[] | undefined = turn?.toolCalls?.map((toolCall) => ({
+        id: toolCall.id,
+        name: toolCall.name,
+        args: JSON.stringify(toolCall.args, null, 2),
+        success: toolCall.success,
+        result: toolCall.error
+          ? toolCall.error
+          : toolCall.data !== undefined
+            ? JSON.stringify(toolCall.data, null, 2)
+            : undefined,
+        duration: toolCall.duration,
+      }))
+      setMessages((prev) => prev.map((m) => m.id === botId ? { ...m, content, streaming: false, turnStats, toolCalls } : m))
 
       /* 刷新 detail 和 session 列表 */
       setTimeout(() => {
