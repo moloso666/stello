@@ -1,8 +1,12 @@
 {
   "extends": "../../tsconfig.json",
   "compilerOptions": {
+    "baseUrl": ".",
     "outDir": "dist",
-    "rootDir": "src"
+    "rootDir": "..",
+    "paths": {
+      "@stello-ai/core": ["../core/src/index.ts"]
+    }
   },
   "include": ["src"]
 }
