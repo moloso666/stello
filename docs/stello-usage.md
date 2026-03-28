@@ -25,8 +25,17 @@
 - `@stello-ai/session`
   - 单个 Session 原语层
   - 负责单次 LLM 对话、messages、memory/consolidate、stream
+  - 提供高层 LLM 工厂函数（`createClaude` / `createGPT`）
+  - 内置上下文自动压缩、fork 上下文继承、工具调用回放
+- `@stello-ai/server`
+  - HTTP / WebSocket 服务层
+  - 承接 `StelloAgent`，提供多租户、跨语言客户端支持
+- `@stello-ai/devtools`
+  - 开发调试工具
+  - Inspector 面板：查看 Session 拓扑、对话历史、per-session prompt 编辑
+  - 状态持久化、工具/技能展示
 - `@stello-ai/visualizer`
-  - Session 拓扑可视化
+  - Session 拓扑可视化（星空图）
 - `demo/stello-agent-basic`
   - 最小 `StelloAgent` 使用示例
 - `demo/stello-agent-chat`
@@ -226,26 +235,91 @@ StelloAgent
 
 ---
 
-## 七、Session 接入现状
+## 七、`@stello-ai/session` 能力概览
 
-`@stello-ai/core` 现在已经支持正式接入 `@stello-ai/session`。
+`@stello-ai/session` 是 Session 原语层，提供单个 Session 的完整生命周期管理。`@stello-ai/core` 通过桥接适配层接入它。
 
-目前已经有桥接适配层，把真实 Session 适配成 core 需要的运行时接口。
+### 基础能力
 
-也就是说：
+- `send()` / `stream()` — 单次 LLM 调用（流式/非流式）
+- `consolidate(fn)` — L3→L2 提炼
+- `MainSession.integrate(fn)` — 所有 L2→synthesis + insights
+- `toolCalls` 解析与工具调用回放
 
-- Session 同学负责单个 Session 的实现
-- Core 这边负责把 Session 接成 Agent 应用
+### 高层 LLM 工厂
 
-当前已经支持：
+推荐使用 `createClaude` / `createGPT` 快速创建 LLM 适配器，自动填充模型元数据和上下文窗口配置：
 
-- `send()`
-- `stream()`
-- `consolidate()`
-- `MainSession.integrate()`
-- `toolCalls` 解析
+```ts
+import { createClaude, createGPT } from '@stello-ai/session'
 
-但如果你要理解 Session 自身设计，建议继续读：
+const claude = createClaude({
+  model: 'claude-sonnet-4-20250514',
+  apiKey: process.env.ANTHROPIC_API_KEY!,
+})
+
+const gpt = createGPT({
+  model: 'gpt-4o',
+  apiKey: process.env.OPENAI_API_KEY!,
+})
+```
+
+支持的模型：
+
+- Claude：`claude-opus-4-20250514` / `claude-sonnet-4-20250514` / `claude-haiku-4-5-20251001`
+- GPT：`gpt-4o` / `gpt-4o-mini` / `gpt-4.1` / `gpt-4.1-mini` / `gpt-4.1-nano` / `o3` / `o3-mini` / `o4-mini`
+
+如果需要自定义模型（如国产模型、自部署端点），仍可使用底层工厂 `createOpenAICompatibleAdapter` / `createAnthropicAdapter`。
+
+### 上下文自动压缩
+
+Session 内置 token 预算模式的上下文压缩，对调用方透明：
+
+- 默认全量回放 L3 历史
+- 当估算 token 数超过 `maxContextTokens * 80%` 时自动裁剪
+- Session 压缩模式：`system prompt + insight + L2 + 最近 L3 + user msg`
+- MainSession 压缩模式：`system prompt + synthesis + 最近 L3 + user msg`
+
+无需额外配置，`createClaude` / `createGPT` 会自动注入对应模型的上下文窗口大小。
+
+### fork() 上下文继承
+
+`fork()` 重构后支持灵活的上下文继承策略：
+
+```ts
+const child = await parent.fork({
+  label: '子话题',
+  context: 'none',       // 默认：空白 L3
+  // context: 'inherit',  // 拷贝父 Session 全部 L3
+  // context: (records) => records.slice(-5),  // 自定义转换
+  systemPrompt: '...',   // 可选：覆盖系统提示词，否则继承
+  prompt: '...',         // 可选：子 Session 的 assistant 开场消息
+  llm: createGPT({...}), // 可选：覆盖 LLM 适配器
+  tools: [...],          // 可选：覆盖工具列表
+})
+```
+
+### 内置工具：createSessionTool
+
+LLM 可通过工具调用动态派生子 Session：
+
+```ts
+import { createSessionTool } from '@stello-ai/session'
+
+const session = await createSession({
+  storage,
+  llm: createClaude({ model: 'claude-sonnet-4-20250514', apiKey: '...' }),
+  tools: [createSessionTool(() => session)],
+})
+```
+
+LLM 调用 `stello_create_session` 工具时，自动 fork 出子 Session 并返回 `{ sessionId, label }`。
+
+### 工具调用结果回放
+
+框架支持将外部工具执行结果以 `ToolResultEnvelope` 格式回灌给 Session，Session 自动解析并重新组装上下文进行 LLM continuation，无需手动拼接消息。
+
+更多 Session 设计细节见：
 
 - [session-usage.md](/Users/bytedance/Github/stello/docs/session-usage.md)
 
@@ -299,28 +373,16 @@ OPENAI_API_KEY=fake DEMO_DRY_RUN=1 node --import tsx demo/stello-agent-chat/chat
 
 ---
 
-## 九、和未来 Server / SDK 的关系
+## 九、Server / Devtools / SDK 的关系
 
-当前这套代码主要还是“库”。
+当前各层定位：
 
-语义上要明确：
+- `@stello-ai/core` — 核心库，`StelloAgent` 本地入口
+- `@stello-ai/server` — HTTP / WebSocket 服务层，承接 `StelloAgent`，提供多租户和跨语言客户端支持
+- `@stello-ai/devtools` — 开发调试工具，Inspector 面板支持 per-session prompt 编辑、状态持久化、工具/技能展示
+- `SDK` — 对 Server API 的薄客户端封装（规划中）
 
-- `@stello-ai/core`
-  - 库
-- `@stello-ai/server`
-  - 未来服务层
-- `SDK`
-  - 未来对 Server API 的薄客户端封装
-
-所以当前：
-
-- `StelloAgent` 是本地对象
-- 不是网络协议层对象
-
-未来 `@stello-ai/server` 会承接 `StelloAgent`，把这些本地方法映射成：
-
-- HTTP 接口
-- WebSocket 连接模型
+`StelloAgent` 本身是本地对象，`@stello-ai/server` 把它的方法映射成 HTTP 接口和 WebSocket 连接模型。
 
 相关设计见：
 
