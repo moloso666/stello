@@ -158,14 +158,13 @@ class ToggleableSkillRouter implements SkillRouter {
     this.base.register(skill)
   }
 
-  /** 匹配 skill 时跳过被禁用项 */
-  match(message: TurnRecord): Skill | null {
-    const matched = this.base.match(message)
-    if (!matched) return null
-    return this.disabledSkills.has(matched.name) ? null : matched
+  /** 按名称查找 skill，被禁用时返回 undefined */
+  get(name: string): Skill | undefined {
+    if (this.disabledSkills.has(name)) return undefined
+    return this.base.get(name)
   }
 
-  /** 列举时带上当前启用过滤 */
+  /** 列举时过滤掉被禁用项 */
   getAll(): Skill[] {
     return this.base.getAll().filter((skill) => !this.disabledSkills.has(skill.name))
   }

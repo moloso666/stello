@@ -237,7 +237,6 @@ async function main(): Promise<void> {
     methods: [
       'enterSession',
       'turn',
-      'ingest',
       'leaveSession',
       'forkSession',
       'archiveSession',
