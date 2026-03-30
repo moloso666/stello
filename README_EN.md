@@ -36,7 +36,7 @@ We've built a new collaboration paradigm between humans and AI, where every conv
 
 ## 🌟 What is Stello?
 
-**The first AI-Native Agent Cognitive Topology Engine.**
+**The first Agent Cognitive Topology Engine.**
 
 Stello is an open-source cognitive topology engine for AI Agent and AI application developers. It provides four core capabilities: auto-splitting conversations, three-layer hierarchical memory, global consciousness integration, and topology visualization.
 
