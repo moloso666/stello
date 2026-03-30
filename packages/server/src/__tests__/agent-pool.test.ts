@@ -30,7 +30,7 @@ function createPoolOptions(overrides?: Partial<AgentPoolOptions>): AgentPoolOpti
         },
         skills: {
           register: () => {},
-          match: () => null,
+          get: () => undefined,
           getAll: () => [],
         },
         confirm: {

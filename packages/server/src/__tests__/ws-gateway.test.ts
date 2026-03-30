@@ -38,7 +38,7 @@ function mockPoolOptions(): AgentPoolOptions {
         },
         skills: {
           register: () => {},
-          match: () => null,
+          get: () => undefined,
           getAll: () => [],
         },
         confirm: {
