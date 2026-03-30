@@ -11,9 +11,8 @@
 
   <h1>Stello</h1>
 
-  <p><strong>Think AI-Native. Know the World AI-Native.</strong></p>
-  <p>Open-source Cognitive Topology Engine · For Multi-Session AI Systems</p>
-  <p>Your thinking is branching and growing—don't let linear chat limit it!</p>
+  <p><strong>Your thinking is branching and growing—don't let linear chat limit it!</strong></p>
+  <p>Building an Open-Source Agent Cognitive Topology Engine — Know the World the AI-Native Way</p>
 
   <p>
     <a href="https://www.npmjs.com/package/@stello-ai/core"><img src="https://img.shields.io/npm/v/@stello-ai/core.svg" alt="npm version"></a>

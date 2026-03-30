@@ -11,9 +11,8 @@
 
   <h1>Stello</h1>
 
-  <p><strong>用 AI Native 的方式认识世界</strong></p>
-  <p>开源认知拓扑引擎 · 面向多 Session AI 系统</p>
-  <p>你的思维正在发散成长！别让线性对话限制了它！</p>
+  <p><strong>你的思维正在发散成长！别让线性对话限制了它！</strong></p>
+  <p>构建开源 Agent 认知拓扑引擎，用 AI Native 的方式认识世界</p>
 
   <p>
     <a href="https://www.npmjs.com/package/@stello-ai/core"><img src="https://img.shields.io/npm/v/@stello-ai/core.svg" alt="npm version"></a>
