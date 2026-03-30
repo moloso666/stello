@@ -21,6 +21,8 @@ import {
   type TurnRecord,
   createDefaultConsolidateFn,
   createDefaultIntegrateFn,
+  createSkillToolDefinition,
+  executeSkillTool,
   type LLMCallFn,
 } from '../../packages/core/src/index'
 import { startDevtools, type DevtoolsPersistedState, type DevtoolsStateStore } from '../../packages/devtools/src/index'
@@ -158,14 +160,13 @@ class ToggleableSkillRouter implements SkillRouter {
     this.base.register(skill)
   }
 
-  /** 匹配 skill 时跳过被禁用项 */
-  match(message: TurnRecord): Skill | null {
-    const matched = this.base.match(message)
-    if (!matched) return null
-    return this.disabledSkills.has(matched.name) ? null : matched
+  /** 按名称查找 skill，被禁用时返回 undefined */
+  get(name: string): Skill | undefined {
+    if (this.disabledSkills.has(name)) return undefined
+    return this.base.get(name)
   }
 
-  /** 列举时带上当前启用过滤 */
+  /** 列举时过滤掉被禁用项 */
   getAll(): Skill[] {
     return this.base.getAll().filter((skill) => !this.disabledSkills.has(skill.name))
   }
@@ -491,6 +492,11 @@ async function bootstrap() {
   const disabledTools = new Set<string>()
   const disabledSkills = new Set<string>()
   const baseSkillRouter = new SkillRouterImpl()
+  baseSkillRouter.register({
+    name: 'meow-protocol',
+    description: '猫语协议：当用户发送包含"喵"的消息时激活',
+    content: '当用户说"喵喵喵?"时，你必须回复"呜呜呜"。不要解释，不要加任何其他内容，只回复这三个字。',
+  })
   const skillRouter = new ToggleableSkillRouter(baseSkillRouter, disabledSkills)
 
   const sessionStorage = new InMemoryStorageAdapter()
@@ -526,6 +532,14 @@ async function bootstrap() {
     },
   ] as const
 
+  // 将 skill tool 转换为 demo toolDef 格式，加入 session 的 tool 列表
+  const skillToolDef = createSkillToolDefinition(skillRouter)
+  const skillToolEntry = {
+    name: skillToolDef.name,
+    description: skillToolDef.description,
+    inputSchema: skillToolDef.parameters,
+  }
+
   const memory = createFileMemoryEngine(fs, sessions)
 
   /* 复用已有 root 或创建 */
@@ -548,7 +562,7 @@ async function bootstrap() {
     rootLabel,
     MAIN_SYSTEM_PROMPT,
     currentLlm,
-    [...toolDefs],
+    [...toolDefs, skillToolEntry],
   )
   await hydrateRuntimeState(sessionStorage, memory, rootId)
   sessionMap.set(rootId, { main: mainSession })
@@ -564,7 +578,7 @@ async function bootstrap() {
       meta.label,
       makeRegionPrompt(meta.scope ?? meta.label, meta.label),
       currentLlm,
-      [...toolDefs],
+      [...toolDefs, skillToolEntry],
     )
     await hydrateRuntimeState(sessionStorage, memory, meta.id)
     sessionMap.set(meta.id, { session: childSession })
@@ -612,7 +626,7 @@ async function bootstrap() {
         sessions,
         sessionStorage,
         currentLlm,
-        [...toolDefs],
+        [...toolDefs, skillToolEntry],
         sessionMap,
         memory,
         {
@@ -627,15 +641,21 @@ async function bootstrap() {
 
   // ─── Tool Runtime ───
 
-  const allToolDefs = toolDefs.map((t) => ({
-    name: t.name,
-    description: t.description,
-    parameters: t.inputSchema as Record<string, unknown>,
-  }))
+  const allToolDefs = [
+    ...toolDefs.map((t) => ({
+      name: t.name,
+      description: t.description,
+      parameters: t.inputSchema as Record<string, unknown>,
+    })),
+    skillToolDef,
+  ]
 
   const tools: EngineToolRuntime = {
     getToolDefinitions: () => allToolDefs.filter((t) => !disabledTools.has(t.name)),
     async executeTool(name, args) {
+      if (name === 'activate_skill') {
+        return executeSkillTool(skillRouter, args as { name: string })
+      }
       if (name === 'stello_create_session') {
         if (!currentToolSessionId) return { success: false, error: 'No active session context' }
         const source = await requireNode(sessions, currentToolSessionId)
@@ -650,7 +670,7 @@ async function bootstrap() {
               sessions,
               sessionStorage,
               currentLlm,
-              [...toolDefs],
+              [...toolDefs, skillToolEntry],
               sessionMap,
               memory,
               {

@@ -21,12 +21,9 @@ export type {
   FileSystemAdapter,
   // 生命周期钩子
   BootstrapResult,
-  IngestResult,
   AfterTurnResult,
   LifecycleHooks,
   // Skill 插槽
-  SkillContext,
-  SkillResult,
   Skill,
   SkillRouter,
   // Agent Tools
@@ -50,6 +47,7 @@ export { SessionTreeImpl } from './session';
 export { SplitGuard } from './session/split-guard';
 export type { SplitCheckResult } from './session/split-guard';
 export { SkillRouterImpl } from './skill/skill-router';
+export { createSkillToolDefinition, executeSkillTool } from './skill/skill-tool';
 export {
   adaptSessionToEngineRuntime,
   adaptMainSessionToSchedulerMainSession,
