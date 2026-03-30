@@ -11,6 +11,7 @@ import type {
 import type { StelloEngine, StelloEventMap } from '../types/engine';
 import type { CreateSessionOptions, TopologyNode } from '../types/session';
 import type { SplitGuard } from '../session/split-guard';
+import { createSkillToolDefinition, executeSkillTool } from '../skill/skill-tool';
 import type { SchedulerSession } from './scheduler';
 import {
   TurnRunner,
@@ -286,11 +287,20 @@ export class StelloEngineImpl implements StelloEngine {
     return child;
   }
 
+  /** 导出 tool 定义，包含内置 skill tool（当有 skill 注册时） */
   getToolDefinitions(): ToolDefinition[] {
-    return this.tools.getToolDefinitions();
+    const defs = this.tools.getToolDefinitions();
+    if (this.skills.getAll().length > 0) {
+      defs.push(createSkillToolDefinition(this.skills));
+    }
+    return defs;
   }
 
-  executeTool(name: string, args: Record<string, unknown>): Promise<ToolExecutionResult> {
+  /** 执行 tool call，内置 skill tool 由 engine 直接处理 */
+  async executeTool(name: string, args: Record<string, unknown>): Promise<ToolExecutionResult> {
+    if (name === 'activate_skill') {
+      return executeSkillTool(this.skills, args as { name: string });
+    }
     return this.tools.executeTool(name, args);
   }
 

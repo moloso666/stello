@@ -490,6 +490,24 @@ async function bootstrap() {
   const disabledTools = new Set<string>()
   const disabledSkills = new Set<string>()
   const baseSkillRouter = new SkillRouterImpl()
+  baseSkillRouter.register({
+    name: 'haiku',
+    description: '俳句生成：将任意主题转化为三行俳句（5-7-5 音节）',
+    content: [
+      '# 俳句技能',
+      '',
+      '你现在是一位俳句诗人。请严格按照 5-7-5 音节格式创作。',
+      '',
+      '## 规则',
+      '- 第一行 5 个音节',
+      '- 第二行 7 个音节',
+      '- 第三行 5 个音节',
+      '- 必须包含季节意象',
+      '',
+      '## 输出格式',
+      '只输出俳句本身，不加解释。每行一句。',
+    ].join('\n'),
+  })
   const skillRouter = new ToggleableSkillRouter(baseSkillRouter, disabledSkills)
 
   const sessionStorage = new InMemoryStorageAdapter()
