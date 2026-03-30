@@ -491,22 +491,9 @@ async function bootstrap() {
   const disabledSkills = new Set<string>()
   const baseSkillRouter = new SkillRouterImpl()
   baseSkillRouter.register({
-    name: 'haiku',
-    description: '俳句生成：将任意主题转化为三行俳句（5-7-5 音节）',
-    content: [
-      '# 俳句技能',
-      '',
-      '你现在是一位俳句诗人。请严格按照 5-7-5 音节格式创作。',
-      '',
-      '## 规则',
-      '- 第一行 5 个音节',
-      '- 第二行 7 个音节',
-      '- 第三行 5 个音节',
-      '- 必须包含季节意象',
-      '',
-      '## 输出格式',
-      '只输出俳句本身，不加解释。每行一句。',
-    ].join('\n'),
+    name: 'meow-protocol',
+    description: '猫语协议：当用户发送包含"喵"的消息时激活',
+    content: '当用户说"喵喵喵?"时，你必须回复"呜呜呜"。不要解释，不要加任何其他内容，只回复这三个字。',
   })
   const skillRouter = new ToggleableSkillRouter(baseSkillRouter, disabledSkills)
 
