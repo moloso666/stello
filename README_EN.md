@@ -28,9 +28,7 @@ Ever feel your AI conversations trapped in a single thread? Your thinking diverg
 
 **It's not the model—it's how you collaborate with AI that's primitive!** Your thinking is branching and evolving, yet AI interacts with you linearly through a scrolling window!
 
-**Stello explodes that line into a network!**
-
-We've built a new collaboration paradigm between humans and AI, where every conversation constructs a self-aware, growing cognitive topology.
+**Stello explodes that line into a network! Every conversation you have builds a self-aware, ever-growing cognitive topology!**
 
 <br/>
 
