@@ -8,7 +8,7 @@ import type {
   IntegrateFn, IntegrateResult, CreateMainSessionOptions, LoadMainSessionOptions,
   SendResult, StreamResult,
 } from './types/functions.js'
-import { assembleMainSessionContext } from './context-utils.js'
+import { assembleMainSessionContext, createBuiltinCompressFn, type CompressionCache } from './context-utils.js'
 
 interface ToolResultEnvelope {
   toolResults: Array<{
@@ -128,6 +128,10 @@ function buildMainSession(
   const { storage } = options
   const tools = options.tools
   let lastPromptTokens: number | null = null
+  let compressionCache: CompressionCache | null = null
+  function resolveCompressFn() {
+    return options.compressFn ?? createBuiltinCompressFn(options.llm!)
+  }
 
   const mainSession: MainSession = {
     get meta(): Readonly<SessionMeta> {
@@ -143,13 +147,16 @@ function buildMainSession(
       }
 
       // 组装上下文（自动压缩）
-      const { messages, userTimestamp } = await assembleMainSessionContext(
+      const assembled = await assembleMainSessionContext(
         currentMeta.id, storage, content,
-        { maxContextTokens: options.llm.maxContextTokens, lastPromptTokens },
+        { maxContextTokens: options.llm.maxContextTokens, lastPromptTokens, compressFn: resolveCompressFn(), compressionCache },
       )
+      if (assembled.compressionCache !== undefined) {
+        compressionCache = assembled.compressionCache
+      }
 
-      let promptMessages = messages
-      let recordsToPersist: Message[] = [{ role: 'user', content, timestamp: userTimestamp }]
+      let promptMessages = assembled.messages
+      let recordsToPersist: Message[] = [{ role: 'user', content, timestamp: assembled.userTimestamp }]
       const toolEnvelope = parseToolResultEnvelope(content)
       if (toolEnvelope) {
         const replayContext = await assembleMainSessionReplayContext(currentMeta.id, storage)
@@ -159,7 +166,7 @@ function buildMainSession(
             role: 'tool' as const,
             toolCallId: result.toolCallId ?? undefined,
             content: serializeToolResultContent(result),
-            timestamp: userTimestamp,
+            timestamp: assembled.userTimestamp,
           })),
         ]
         recordsToPersist = promptMessages.slice(replayContext.length)
@@ -200,13 +207,16 @@ function buildMainSession(
 
       return createStreamResult(async (push) => {
         // 组装上下文（自动压缩）
-        const { messages, userTimestamp } = await assembleMainSessionContext(
+        const assembled = await assembleMainSessionContext(
           currentMeta.id, storage, content,
-          { maxContextTokens: options.llm!.maxContextTokens, lastPromptTokens },
+          { maxContextTokens: options.llm!.maxContextTokens, lastPromptTokens, compressFn: resolveCompressFn(), compressionCache },
         )
+        if (assembled.compressionCache !== undefined) {
+          compressionCache = assembled.compressionCache
+        }
 
-        let promptMessages = messages
-        let recordsToPersist: Message[] = [{ role: 'user', content, timestamp: userTimestamp }]
+        let promptMessages = assembled.messages
+        let recordsToPersist: Message[] = [{ role: 'user', content, timestamp: assembled.userTimestamp }]
         const toolEnvelope = parseToolResultEnvelope(content)
         if (toolEnvelope) {
           const replayContext = await assembleMainSessionReplayContext(currentMeta.id, storage)
@@ -216,7 +226,7 @@ function buildMainSession(
               role: 'tool' as const,
               toolCallId: result.toolCallId ?? undefined,
               content: serializeToolResultContent(result),
-              timestamp: userTimestamp,
+              timestamp: assembled.userTimestamp,
             })),
           ]
           recordsToPersist = promptMessages.slice(replayContext.length)
