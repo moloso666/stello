@@ -22,6 +22,7 @@ import {
   createDefaultConsolidateFn,
   createDefaultIntegrateFn,
   createSkillToolDefinition,
+  executeSkillTool,
   loadSkillsFromDirectory,
   type LLMCallFn,
 } from '../../packages/core/src/index'
@@ -29,6 +30,7 @@ import { startDevtools, type DevtoolsPersistedState, type DevtoolsStateStore } f
 import {
   createOpenAICompatibleAdapter,
 } from '../../packages/session/src/adapters/openai-compatible'
+import { createSessionTool } from '../../packages/session/src/tools/create-session-tool'
 import { loadMainSession } from '../../packages/session/src/create-main-session'
 import { loadSession } from '../../packages/session/src/create-session'
 import { InMemoryStorageAdapter } from '../../packages/session/src/mocks/in-memory-storage'
@@ -641,8 +643,6 @@ async function bootstrap() {
           parentId: options.parentId,
           label: options.label,
           scope: options.scope,
-          systemPrompt: options.systemPrompt,
-          prompt: options.prompt,
           metadata: options.metadata,
         },
       )
@@ -650,24 +650,70 @@ async function bootstrap() {
   }
 
   // ─── Tool Runtime ───
-  // Engine 自动注入 stello_create_session 和 activate_skill 的定义与执行。
-  // 这里只需提供应用层自定义工具。
+
+  const allToolDefs = [
+    ...toolDefs.map((t) => ({
+      name: t.name,
+      description: t.description,
+      parameters: t.inputSchema as Record<string, unknown>,
+    })),
+    skillToolDef,
+  ]
 
   const tools: EngineToolRuntime = {
-    getToolDefinitions: () => [
-      {
-        name: 'save_note',
-        description: '保存重要的调研结论到当前会话的笔记中，供跨区域整合时参考。',
-        parameters: {
-          type: 'object',
-          properties: {
-            note: { type: 'string', description: '要保存的结论或笔记内容' },
-          },
-          required: ['note'],
-        },
-      },
-    ].filter((t) => !disabledTools.has(t.name)),
+    getToolDefinitions: () => allToolDefs.filter((t) => !disabledTools.has(t.name)),
     async executeTool(name, args) {
+      if (name === 'activate_skill') {
+        return executeSkillTool(skillRouter, args as { name: string })
+      }
+      if (name === 'stello_create_session') {
+        if (!currentToolSessionId) return { success: false, error: 'No active session context' }
+        const source = await requireNode(sessions, currentToolSessionId)
+        const effectiveParentId = source.parentId === null ? source.id : (await sessions.getRoot()).id
+        const parentEntry = sessionMap.get(currentToolSessionId)
+        if (!parentEntry) return { success: false, error: `Unknown session: ${currentToolSessionId}` }
+        const parentSession = 'main' in parentEntry && parentEntry.main ? parentEntry.main : parentEntry.session
+        const createTool = createSessionTool(() => ({
+          fork: async (forkOptions) => {
+            const child = await createDemoChildSession(
+              fs,
+              sessions,
+              sessionStorage,
+              currentLlm,
+              [...toolDefs, skillToolEntry],
+              sessionMap,
+              memory,
+              {
+                parentId: effectiveParentId,
+                label: forkOptions.label,
+                systemPrompt: forkOptions.systemPrompt ?? await parentSession.systemPrompt() ?? undefined,
+                prompt: forkOptions.prompt,
+                metadata: { sourceSessionId: currentToolSessionId },
+              },
+            )
+            const childEntry = sessionMap.get(child.id)
+            if (!childEntry || !('session' in childEntry) || !childEntry.session) {
+              throw new Error(`Failed to load child session: ${child.id}`)
+            }
+            return childEntry.session
+          },
+        } as Session))
+        const result = await createTool.execute({
+          label: String(args.label ?? '新会话'),
+          ...(args.systemPrompt ? { systemPrompt: String(args.systemPrompt) } : {}),
+          ...(args.prompt ? { prompt: String(args.prompt) } : {}),
+        })
+        const output = result.output as { sessionId: string; label: string }
+        const child = await requireNode(sessions, output.sessionId)
+        return {
+          success: true,
+          data: {
+            sessionId: output.sessionId,
+            label: output.label,
+            parentId: child.parentId,
+          },
+        }
+      }
       if (name === 'save_note') {
         if (!currentToolSessionId) return { success: false, error: 'No active session context' }
         const existingScope = await memory.readScope(currentToolSessionId).catch(() => null)
