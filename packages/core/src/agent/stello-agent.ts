@@ -36,6 +36,7 @@ import type { MemoryEngine } from '../types/memory';
 import type { ConfirmProtocol, SkillRouter } from '../types/lifecycle';
 import type { EngineLifecycleAdapter, EngineToolRuntime } from '../engine/stello-engine';
 import type { ForkProfileRegistry } from '../engine/fork-profile';
+import type { SessionRuntimeCreateOptions } from '../orchestrator/default-engine-factory';
 import type { Scheduler, SchedulerConfig, SchedulerMainSession } from '../engine/scheduler';
 import type { SplitGuard } from '../session/split-guard';
 
@@ -58,6 +59,8 @@ export interface StelloAgentCapabilitiesConfig {
 export interface StelloAgentSessionConfig {
   /** 按 sessionId 解析真实 Session */
   sessionResolver?: (sessionId: string) => Promise<SessionCompatible>;
+  /** 创建新 session 的工厂。提供后 Engine 接管 fork 编排，不再需要 prepareChildSpawn。 */
+  sessionCreator?: (sessionId: string, options: SessionRuntimeCreateOptions) => Promise<SessionCompatible>;
   /** 解析 MainSession（可选，仅在需要 integration 时提供） */
   mainSessionResolver?: () => Promise<MainSessionCompatible | null>;
   /** Session L3 → L2 的提炼函数 */
@@ -114,14 +117,23 @@ function resolveRuntimeResolver(config: StelloAgentConfig): SessionRuntimeResolv
   }
 
   if (config.session?.sessionResolver && config.session.consolidateFn) {
+    const adaptOptions = {
+      consolidateFn: config.session!.consolidateFn!,
+      serializeResult: config.session!.serializeSendResult ?? serializeSessionSendResult,
+    };
     return {
       resolve: async (sessionId: string) => {
         const session = await config.session!.sessionResolver!(sessionId);
-        return adaptSessionToEngineRuntime(session, {
-          consolidateFn: config.session!.consolidateFn!,
-          serializeResult: config.session!.serializeSendResult ?? serializeSessionSendResult,
-        });
+        return adaptSessionToEngineRuntime(session, adaptOptions);
       },
+      ...(config.session.sessionCreator
+        ? {
+            create: async (sessionId: string, options: SessionRuntimeCreateOptions) => {
+              const session = await config.session!.sessionCreator!(sessionId, options);
+              return adaptSessionToEngineRuntime(session, adaptOptions);
+            },
+          }
+        : {}),
     };
   }
 

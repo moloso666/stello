@@ -10,6 +10,7 @@ import type {
 } from '../types/lifecycle';
 import type { StelloEngine, StelloEventMap } from '../types/engine';
 import type { CreateSessionOptions, TopologyNode } from '../types/session';
+import type { SessionRuntimeResolver } from '../orchestrator/default-engine-factory';
 import type { SplitGuard } from '../session/split-guard';
 import { createSkillToolDefinition, executeSkillTool } from '../skill/skill-tool';
 import { CREATE_SESSION_TOOL_NAME, createSessionToolDefinition } from './builtin-tools';
@@ -45,8 +46,8 @@ export interface EngineLifecycleAdapter {
   bootstrap(sessionId: string): Promise<BootstrapResult>;
   /** 兼容旧的 afterTurn 流程 */
   afterTurn(sessionId: string, userMsg: TurnRecord, assistantMsg: TurnRecord): Promise<AfterTurnResult>;
-  /** fork 子 Session */
-  prepareChildSpawn(options: CreateSessionOptions): Promise<TopologyNode>;
+  /** @deprecated 使用 SessionRuntimeResolver.create() 替代 */
+  prepareChildSpawn?(options: CreateSessionOptions): Promise<TopologyNode>;
 }
 
 /** tool 执行器最小契约 */
@@ -69,6 +70,8 @@ export interface StelloEngineOptions {
   hooks?: Partial<EngineHooks>;
   /** Fork profile 注册表（可选） */
   profiles?: ForkProfileRegistry;
+  /** Session runtime 解析器（支持 create 时启用 Engine-owned fork） */
+  resolver?: SessionRuntimeResolver;
 }
 
 /** turn 的聚合结果 */
@@ -134,6 +137,7 @@ export class StelloEngineImpl implements StelloEngine {
   private readonly turnRunner: TurnRunner;
   private readonly hooks: Partial<EngineHooks>;
   private readonly profiles?: ForkProfileRegistry;
+  private readonly resolver?: SessionRuntimeResolver;
   private readonly handlers = new Map<keyof StelloEventMap, Set<(data: unknown) => void>>();
 
   constructor(options: StelloEngineOptions) {
@@ -147,6 +151,7 @@ export class StelloEngineImpl implements StelloEngine {
     this.splitGuard = options.splitGuard;
     this.hooks = options.hooks ?? {};
     this.profiles = options.profiles;
+    this.resolver = options.resolver;
     this.turnRunner =
       options.turnRunner ??
       new TurnRunner({
@@ -280,10 +285,26 @@ export class StelloEngineImpl implements StelloEngine {
       }
     }
 
-    const child = await this.lifecycle.prepareChildSpawn({
-      ...options,
-      parentId,
-    });
+    let child: TopologyNode;
+
+    if (this.resolver?.create) {
+      // 新路径：Engine 编排（创建拓扑 + 委托工厂创建 session）
+      child = await this.sessions.createChild({ ...options, parentId });
+      await this.resolver.create(child.id, {
+        label: options.label,
+        systemPrompt: options.systemPrompt,
+        prompt: options.prompt,
+        context: options.context,
+        metadata: options.metadata,
+        tags: options.tags,
+        resolved: options.resolved,
+      });
+    } else if (this.lifecycle.prepareChildSpawn) {
+      // 旧路径（deprecated fallback）
+      child = await this.lifecycle.prepareChildSpawn({ ...options, parentId });
+    } else {
+      throw new Error('Fork 不可用：需要提供 SessionRuntimeResolver.create 或 EngineLifecycleAdapter.prepareChildSpawn');
+    }
 
     if (this.splitGuard) {
       this.splitGuard.recordSplit(parentId, this.session.meta.turnCount);

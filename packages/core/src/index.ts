@@ -122,6 +122,7 @@ export type {
 export { DefaultEngineFactory } from './orchestrator/default-engine-factory';
 export type {
   SessionRuntimeResolver,
+  SessionRuntimeCreateOptions,
   EngineHookProvider,
   DefaultEngineFactoryOptions,
 } from './orchestrator/default-engine-factory';

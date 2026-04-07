@@ -444,7 +444,7 @@ function buildSession(
 
 /** createSession — 创建一个新的 Session */
 export async function createSession(options: CreateSessionOptions): Promise<Session> {
-  const id = randomUUID()
+  const id = options.id ?? randomUUID()
   const now = new Date().toISOString()
 
   const meta: SessionMeta = {

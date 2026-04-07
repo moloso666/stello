@@ -19,6 +19,7 @@ import {
   type TopologyNode,
   type SessionTree,
   type StelloAgentConfig,
+  type SessionRuntimeCreateOptions,
   type TurnRecord,
   createDefaultConsolidateFn,
   createDefaultIntegrateFn,
@@ -30,7 +31,7 @@ import {
   createOpenAICompatibleAdapter,
 } from '../../packages/session/src/adapters/openai-compatible'
 import { loadMainSession } from '../../packages/session/src/create-main-session'
-import { loadSession } from '../../packages/session/src/create-session'
+import { createSession, loadSession } from '../../packages/session/src/create-session'
 import { InMemoryStorageAdapter } from '../../packages/session/src/mocks/in-memory-storage'
 import type { MainSession } from '../../packages/session/src/types/main-session-api.ts'
 import type { Session } from '../../packages/session/src/types/session-api.ts'
@@ -129,15 +130,6 @@ type DemoToolDef = Array<{
   description: string
   inputSchema: Record<string, unknown>
 }>
-
-interface ChildSessionBootstrapOptions {
-  parentId: string
-  label: string
-  scope?: string
-  systemPrompt?: string
-  prompt?: string
-  metadata?: Record<string, unknown>
-}
 
 type WrappedSession = { session: Session; main?: never }
 type WrappedMainSession = { main: MainSession; session?: never }
@@ -305,41 +297,6 @@ async function hydrateRuntimeState(
   if (scope) {
     await storage.putInsight(sessionId, scope)
   }
-}
-
-/** 创建子会话并同步拓扑、真实 Session 和初始上下文。 */
-async function createDemoChildSession(
-  fs: NodeFileSystemAdapter,
-  sessions: SessionTreeImpl,
-  storage: InMemoryStorageAdapter,
-  llm: ReturnType<typeof createOpenAICompatibleAdapter>,
-  tools: DemoToolDef,
-  sessionMap: Map<string, WrappedSession | WrappedMainSession>,
-  memory: MemoryEngine,
-  options: ChildSessionBootstrapOptions,
-): Promise<TopologyNode> {
-  const child = await sessions.createChild({
-    parentId: options.parentId,
-    label: options.label,
-    scope: options.scope,
-    metadata: options.metadata,
-  })
-  const childSession = await registerStandardSession(
-    fs,
-    storage,
-    child.id,
-    child.label,
-    options.systemPrompt ?? makeRegionPrompt(options.scope ?? child.label, child.label),
-    llm,
-    [...tools],
-  )
-  if (options.prompt) {
-    const record = { role: 'assistant' as const, content: options.prompt, timestamp: new Date().toISOString() }
-    await storage.appendRecord(child.id, record)
-    await memory.appendRecord(child.id, record)
-  }
-  sessionMap.set(child.id, { session: childSession })
-  return child
 }
 
 /** 把普通 Session 适配成 core 兼容接口。 */
@@ -617,25 +574,6 @@ async function bootstrap() {
       await sessions.updateMeta(sessionId, { turnCount: current.turnCount + 1 })
       return { coreUpdated: false, memoryUpdated: false, recordAppended: true }
     },
-    prepareChildSpawn: async (options) => {
-      return createDemoChildSession(
-        fs,
-        sessions,
-        sessionStorage,
-        currentLlm,
-        sessionTools,
-        sessionMap,
-        memory,
-        {
-          parentId: options.parentId,
-          label: options.label,
-          scope: options.scope,
-          systemPrompt: options.systemPrompt,
-          prompt: options.prompt,
-          metadata: options.metadata,
-        },
-      )
-    },
   }
 
   // ─── Scheduler ───
@@ -647,10 +585,13 @@ async function bootstrap() {
 
   // ─── Agent Config ───
 
+  // agent 在 confirm 之后创建，用延迟引用
+  let agentRef: ReturnType<typeof createStelloAgent> | null = null
+
   const confirm: ConfirmProtocol = {
     async confirmSplit(proposal) {
-      return lifecycle.prepareChildSpawn({
-        parentId: proposal.parentId,
+      if (!agentRef) throw new Error('Agent not initialized')
+      return agentRef.forkSession(proposal.parentId, {
         label: proposal.suggestedLabel,
         scope: proposal.suggestedScope,
       })
@@ -671,6 +612,36 @@ async function bootstrap() {
           return wrapMainSession(sessionId, entry.main)
         }
         return wrapStandardSession(sessionId, entry.session, memory)
+      },
+      sessionCreator: async (sessionId: string, options: SessionRuntimeCreateOptions) => {
+        // 检查持久化的 systemPrompt（用户在 devtools 中编辑过）
+        const persistedPrompt = await readPersistedSystemPrompt(fs, sessionId)
+        const effectivePrompt = persistedPrompt
+          ?? options.systemPrompt
+          ?? makeRegionPrompt(options.label, options.label)
+
+        const session = await createSession({
+          id: sessionId,
+          storage: sessionStorage,
+          llm: options.resolved?.llm ?? currentLlm,
+          label: options.label,
+          systemPrompt: effectivePrompt,
+          tools: options.resolved?.tools ?? [...sessionTools],
+        })
+
+        // prompt 写入 storage + memory（文件层持久化）
+        if (options.prompt) {
+          const record = {
+            role: 'assistant' as const,
+            content: options.prompt,
+            timestamp: new Date().toISOString(),
+          }
+          await sessionStorage.appendRecord(sessionId, record)
+          await memory.appendRecord(sessionId, record)
+        }
+
+        sessionMap.set(sessionId, { session })
+        return wrapStandardSession(sessionId, session, memory)
       },
       mainSessionResolver: async () => ({
         async integrate(fn: Parameters<typeof mainSession.integrate>[0]) {
@@ -715,6 +686,7 @@ async function bootstrap() {
   }
 
   const agent = createStelloAgent(config)
+  agentRef = agent
 
   // ─── DevTools Providers ───
 

@@ -30,6 +30,8 @@ export type IntegrateFn = (
 
 /** createSession() 的选项 */
 export interface CreateSessionOptions {
+  /** 指定 session ID（用于与拓扑节点对齐）。不提供则自动生成。 */
+  id?: string
   /** 指定存储适配器（普通 Session 只需 SessionStorage） */
   storage: SessionStorage
   /** 指定 LLM 适配器 */
