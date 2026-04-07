@@ -182,4 +182,109 @@ describe('DefaultEngineFactory', () => {
     expect(userOnRoundEnd).toHaveBeenCalledTimes(1);
     expect(scheduler.afterTurn).toHaveBeenCalledTimes(1);
   });
+
+  it('session metadata 有 _stello.allowedSkills 时，engine 使用过滤后的 skills', async () => {
+    const runtimeSession = makeSession()
+    const globalSkills = {
+      get: vi.fn((name: string) => ({ name, description: `${name} desc`, content: `${name} content` })),
+      register: vi.fn(),
+      getAll: vi.fn().mockReturnValue([
+        { name: 'research', description: 'research desc', content: 'research content' },
+        { name: 'coding', description: 'coding desc', content: 'coding content' },
+        { name: 'translate', description: 'translate desc', content: 'translate content' },
+      ]),
+    } as unknown as SkillRouter
+
+    const opts = baseOptions()
+    const factory = new DefaultEngineFactory({
+      ...opts,
+      skills: globalSkills,
+      sessions: {
+        ...opts.sessions,
+        get: vi.fn().mockResolvedValue({
+          id: 's1', label: 'test', scope: null, status: 'active',
+          turnCount: 0, tags: [], createdAt: '', updatedAt: '', lastActiveAt: '',
+          metadata: { _stello: { allowedSkills: ['research', 'coding'] } },
+        }),
+      } as unknown as SessionTree,
+      sessionRuntimeResolver: {
+        resolve: vi.fn().mockResolvedValue(runtimeSession),
+      },
+    })
+
+    const engine = await factory.create('s1')
+    const defs = engine.getToolDefinitions()
+    const skillTool = defs.find(d => d.name === 'activate_skill')
+
+    expect(skillTool).toBeDefined()
+    expect(skillTool!.description).toContain('research')
+    expect(skillTool!.description).toContain('coding')
+    expect(skillTool!.description).not.toContain('translate')
+  })
+
+  it('session metadata 有 _stello.allowedSkills: [] 时，activate_skill 工具不出现', async () => {
+    const runtimeSession = makeSession()
+    const globalSkills = {
+      get: vi.fn(),
+      register: vi.fn(),
+      getAll: vi.fn().mockReturnValue([
+        { name: 'research', description: 'research desc', content: 'research content' },
+      ]),
+    } as unknown as SkillRouter
+
+    const opts = baseOptions()
+    const factory = new DefaultEngineFactory({
+      ...opts,
+      skills: globalSkills,
+      sessions: {
+        ...opts.sessions,
+        get: vi.fn().mockResolvedValue({
+          id: 's1', label: 'test', scope: null, status: 'active',
+          turnCount: 0, tags: [], createdAt: '', updatedAt: '', lastActiveAt: '',
+          metadata: { _stello: { allowedSkills: [] } },
+        }),
+      } as unknown as SessionTree,
+      sessionRuntimeResolver: {
+        resolve: vi.fn().mockResolvedValue(runtimeSession),
+      },
+    })
+
+    const engine = await factory.create('s1')
+    const defs = engine.getToolDefinitions()
+    expect(defs.find(d => d.name === 'activate_skill')).toBeUndefined()
+  })
+
+  it('session metadata 无 _stello 时，使用全局 skills（不过滤）', async () => {
+    const runtimeSession = makeSession()
+    const globalSkills = {
+      get: vi.fn(),
+      register: vi.fn(),
+      getAll: vi.fn().mockReturnValue([
+        { name: 'research', description: 'research desc', content: 'research content' },
+      ]),
+    } as unknown as SkillRouter
+
+    const opts = baseOptions()
+    const factory = new DefaultEngineFactory({
+      ...opts,
+      skills: globalSkills,
+      sessions: {
+        ...opts.sessions,
+        get: vi.fn().mockResolvedValue({
+          id: 's1', label: 'test', scope: null, status: 'active',
+          turnCount: 0, tags: [], createdAt: '', updatedAt: '', lastActiveAt: '',
+          metadata: { sourceSessionId: 'root' },
+        }),
+      } as unknown as SessionTree,
+      sessionRuntimeResolver: {
+        resolve: vi.fn().mockResolvedValue(runtimeSession),
+      },
+    })
+
+    const engine = await factory.create('s1')
+    const defs = engine.getToolDefinitions()
+    const skillTool = defs.find(d => d.name === 'activate_skill')
+    expect(skillTool).toBeDefined()
+    expect(skillTool!.description).toContain('research')
+  })
 });

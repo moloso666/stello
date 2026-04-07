@@ -1,6 +1,7 @@
 import type { SessionTree } from '../types/session';
 import type { MemoryEngine } from '../types/memory';
 import type { ConfirmProtocol, SkillRouter } from '../types/lifecycle';
+import { FilteredSkillRouter } from '../skill/filtered-skill-router';
 import {
   StelloEngineImpl,
   type EngineHooks,
@@ -50,12 +51,13 @@ export class DefaultEngineFactory implements EngineFactory {
     const userHooks = this.resolveHooks(sessionId);
     const schedulerHooks = this.buildSchedulerHooks(session);
     const mergedHooks = this.mergeHooks(userHooks, schedulerHooks);
+    const skills = await this.resolveSkillRouter(sessionId);
 
     return new StelloEngineImpl({
       session,
       sessions: this.options.sessions,
       memory: this.options.memory,
-      skills: this.options.skills,
+      skills,
       confirm: this.options.confirm,
       lifecycle: this.options.lifecycle,
       tools: this.options.tools,
@@ -64,6 +66,28 @@ export class DefaultEngineFactory implements EngineFactory {
       turnRunner: this.options.turnRunner,
       hooks: mergedHooks,
     });
+  }
+
+  /** 按 session metadata 中的 _stello.allowedSkills 创建过滤后的 SkillRouter */
+  private async resolveSkillRouter(sessionId: string): Promise<SkillRouter> {
+    const meta = typeof this.options.sessions.get === 'function'
+      ? await this.options.sessions.get(sessionId)
+      : null;
+    const stelloMeta = meta?.metadata?._stello;
+
+    if (
+      !stelloMeta
+      || typeof stelloMeta !== 'object'
+      || !('allowedSkills' in stelloMeta)
+      || !Array.isArray((stelloMeta as Record<string, unknown>).allowedSkills)
+    ) {
+      return this.options.skills;
+    }
+
+    return new FilteredSkillRouter(
+      this.options.skills,
+      new Set((stelloMeta as { allowedSkills: string[] }).allowedSkills),
+    );
   }
 
   /** 构建 scheduler 闭包 hooks */
