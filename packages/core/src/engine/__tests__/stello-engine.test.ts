@@ -696,6 +696,92 @@ describe('StelloEngineImpl', () => {
       const profileDef = props.profile as Record<string, unknown>;
       expect(profileDef.enum).toEqual(['research', 'lightweight']);
     });
+
+    it('profile.skills 写入 metadata._stello.allowedSkills', async () => {
+      const profileRegistry = new ForkProfileRegistryImpl()
+      profileRegistry.register('research', {
+        systemPrompt: '你是研究助手',
+        skills: ['search', 'summarize'],
+      })
+
+      const createChild = vi.fn().mockResolvedValue({
+        id: 'c1', parentId: 's1', children: [], refs: [],
+        depth: 1, index: 0, label: '研究',
+      })
+      const sessionFork = vi.fn().mockResolvedValue({
+        id: 'c1', meta: { id: 'c1', turnCount: 0, status: 'active' },
+        turnCount: 0, send: vi.fn(), consolidate: vi.fn(),
+      })
+
+      const engine = new StelloEngineImpl({
+        session: {
+          id: 's1',
+          meta: { id: 's1', turnCount: 0, status: 'active' as const },
+          turnCount: 0,
+          send: vi.fn(),
+          consolidate: vi.fn(),
+          fork: sessionFork,
+        },
+        sessions: { ...sessions, createChild } as unknown as SessionTree,
+        memory, skills, confirm,
+        lifecycle: { bootstrap: vi.fn(), afterTurn: vi.fn() },
+        tools: { getToolDefinitions: vi.fn().mockReturnValue([]), executeTool: vi.fn() },
+        profiles: profileRegistry,
+      })
+
+      await engine.executeTool('stello_create_session', {
+        label: '研究',
+        profile: 'research',
+      })
+
+      expect(sessionFork).toHaveBeenCalledWith(
+        expect.objectContaining({
+          metadata: expect.objectContaining({
+            _stello: { allowedSkills: ['search', 'summarize'] },
+          }),
+        }),
+      )
+    })
+
+    it('profile 无 skills 时 metadata 不包含 _stello', async () => {
+      const profileRegistry = new ForkProfileRegistryImpl()
+      profileRegistry.register('basic', {
+        systemPrompt: '基础',
+      })
+
+      const createChild = vi.fn().mockResolvedValue({
+        id: 'c1', parentId: 's1', children: [], refs: [],
+        depth: 1, index: 0, label: 'test',
+      })
+      const sessionFork = vi.fn().mockResolvedValue({
+        id: 'c1', meta: { id: 'c1', turnCount: 0, status: 'active' },
+        turnCount: 0, send: vi.fn(), consolidate: vi.fn(),
+      })
+
+      const engine = new StelloEngineImpl({
+        session: {
+          id: 's1',
+          meta: { id: 's1', turnCount: 0, status: 'active' as const },
+          turnCount: 0,
+          send: vi.fn(),
+          consolidate: vi.fn(),
+          fork: sessionFork,
+        },
+        sessions: { ...sessions, createChild } as unknown as SessionTree,
+        memory, skills, confirm,
+        lifecycle: { bootstrap: vi.fn(), afterTurn: vi.fn() },
+        tools: { getToolDefinitions: vi.fn().mockReturnValue([]), executeTool: vi.fn() },
+        profiles: profileRegistry,
+      })
+
+      await engine.executeTool('stello_create_session', {
+        label: 'test',
+        profile: 'basic',
+      })
+
+      const calledMeta = sessionFork.mock.calls[0]![0].metadata
+      expect(calledMeta).not.toHaveProperty('_stello')
+    })
   });
 
   it('splitGuard 拒绝时不会创建子 session', async () => {

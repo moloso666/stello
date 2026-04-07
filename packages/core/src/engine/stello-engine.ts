@@ -364,6 +364,11 @@ export class StelloEngineImpl implements StelloEngine {
       const argsContext = args.context as 'none' | 'inherit' | undefined;
       const context = profile?.contextFn ?? profile?.context ?? argsContext ?? undefined;
 
+      const stelloMeta: Record<string, unknown> = {}
+      if (profile?.skills) {
+        stelloMeta.allowedSkills = profile.skills
+      }
+
       const child = await this.forkSession({
         label: args.label as string,
         systemPrompt,
@@ -371,7 +376,10 @@ export class StelloEngineImpl implements StelloEngine {
         context,
         llm: profile?.llm,
         tools: profile?.tools,
-        metadata: { sourceSessionId: this.session.id },
+        metadata: {
+          sourceSessionId: this.session.id,
+          ...(Object.keys(stelloMeta).length > 0 ? { _stello: stelloMeta } : {}),
+        },
       });
 
       return { success: true, data: { sessionId: child.id, label: child.label } };
