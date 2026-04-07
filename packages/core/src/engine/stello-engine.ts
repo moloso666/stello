@@ -46,8 +46,6 @@ export interface EngineLifecycleAdapter {
   bootstrap(sessionId: string): Promise<BootstrapResult>;
   /** 兼容旧的 afterTurn 流程 */
   afterTurn(sessionId: string, userMsg: TurnRecord, assistantMsg: TurnRecord): Promise<AfterTurnResult>;
-  /** @deprecated 使用 SessionRuntimeResolver.create() 替代 */
-  prepareChildSpawn?(options: CreateSessionOptions): Promise<TopologyNode>;
 }
 
 /** tool 执行器最小契约 */
@@ -285,26 +283,13 @@ export class StelloEngineImpl implements StelloEngine {
       }
     }
 
-    let child: TopologyNode;
-
-    if (this.resolver?.create) {
-      // 新路径：Engine 编排（创建拓扑 + 委托工厂创建 session）
-      child = await this.sessions.createChild({ ...options, parentId });
-      await this.resolver.create(child.id, {
-        label: options.label,
-        systemPrompt: options.systemPrompt,
-        prompt: options.prompt,
-        context: options.context,
-        metadata: options.metadata,
-        tags: options.tags,
-        resolved: options.resolved,
-      });
-    } else if (this.lifecycle.prepareChildSpawn) {
-      // 旧路径（deprecated fallback）
-      child = await this.lifecycle.prepareChildSpawn({ ...options, parentId });
-    } else {
-      throw new Error('Fork 不可用：需要提供 SessionRuntimeResolver.create 或 EngineLifecycleAdapter.prepareChildSpawn');
+    if (!this.resolver?.create) {
+      throw new Error('Fork 不可用：需要提供 SessionRuntimeResolver.create');
     }
+
+    // Engine 编排：创建拓扑节点 + 委托工厂创建 session
+    const child = await this.sessions.createChild({ ...options, parentId });
+    await this.resolver.create(child.id, options);
 
     if (this.splitGuard) {
       this.splitGuard.recordSplit(parentId, this.session.meta.turnCount);
@@ -365,7 +350,7 @@ export class StelloEngineImpl implements StelloEngine {
       const argsContext = args.context as 'none' | 'inherit' | undefined;
       const context = profile?.context ?? argsContext ?? undefined;
 
-      // 构建 resolved（运行时对象，透传给 prepareChildSpawn）
+      // 构建 resolved（运行时对象，透传给 resolver.create）
       const resolved: Record<string, unknown> = {};
       if (profile?.llm) resolved.llm = profile.llm;
       if (profile?.tools) resolved.tools = profile.tools;

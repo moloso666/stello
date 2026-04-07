@@ -26,7 +26,6 @@ describe('DefaultEngineFactory', () => {
         session: { id: 's1' },
       }),
       afterTurn: vi.fn(),
-      prepareChildSpawn: vi.fn(),
     },
     tools: {
       getToolDefinitions: vi.fn().mockReturnValue([]),

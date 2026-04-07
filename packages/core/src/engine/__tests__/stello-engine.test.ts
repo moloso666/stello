@@ -63,7 +63,7 @@ describe('StelloEngineImpl', () => {
       lifecycle: {
         bootstrap: vi.fn(),
         afterTurn: vi.fn(),
-        prepareChildSpawn: vi.fn(),
+
       },
       tools: {
         getToolDefinitions: vi.fn().mockReturnValue([]),
@@ -129,7 +129,7 @@ describe('StelloEngineImpl', () => {
       lifecycle: {
         bootstrap: vi.fn(),
         afterTurn: vi.fn(),
-        prepareChildSpawn: vi.fn(),
+
       },
       tools: {
         getToolDefinitions: vi.fn().mockReturnValue([]),
@@ -184,7 +184,7 @@ describe('StelloEngineImpl', () => {
       lifecycle: {
         bootstrap: vi.fn(),
         afterTurn: vi.fn(),
-        prepareChildSpawn: vi.fn(),
+
       },
       tools: {
         getToolDefinitions: vi.fn().mockReturnValue([]),
@@ -216,7 +216,6 @@ describe('StelloEngineImpl', () => {
         session: { id: 's1' },
       }),
       afterTurn: vi.fn(),
-      prepareChildSpawn: vi.fn(),
     };
     const onSessionEnter = vi.fn();
 
@@ -266,7 +265,7 @@ describe('StelloEngineImpl', () => {
       lifecycle: {
         bootstrap: vi.fn(),
         afterTurn: vi.fn(),
-        prepareChildSpawn: vi.fn(),
+
       },
       tools: {
         getToolDefinitions: vi.fn().mockReturnValue([]),
@@ -301,7 +300,7 @@ describe('StelloEngineImpl', () => {
       lifecycle: {
         bootstrap: vi.fn(),
         afterTurn: vi.fn(),
-        prepareChildSpawn: vi.fn(),
+
       },
       tools: {
         getToolDefinitions: vi.fn().mockReturnValue([]),
@@ -318,14 +317,13 @@ describe('StelloEngineImpl', () => {
   });
 
   it('forkSession 会先过 splitGuard，再创建子 session', async () => {
-    const prepareChildSpawn = vi.fn().mockResolvedValue({
-      id: 'child-1',
-      parentId: 's1',
-      children: [],
-      refs: [],
-      depth: 1,
-      index: 0,
-      label: 'UI',
+    const createChild = vi.fn().mockResolvedValue({
+      id: 'child-1', parentId: 's1', children: [], refs: [],
+      depth: 1, index: 0, label: 'UI',
+    });
+    const resolverCreate = vi.fn().mockResolvedValue({
+      id: 'child-1', meta: { id: 'child-1', turnCount: 0, status: 'active' },
+      turnCount: 0, send: vi.fn(), consolidate: vi.fn(),
     });
     const splitGuard = {
       checkCanSplit: vi.fn().mockResolvedValue({ canSplit: true }),
@@ -340,19 +338,16 @@ describe('StelloEngineImpl', () => {
         send: vi.fn(),
         consolidate: vi.fn(),
       },
-      sessions,
+      sessions: { ...sessions, createChild } as unknown as SessionTree,
       memory,
       skills,
       confirm,
-      lifecycle: {
-        bootstrap: vi.fn(),
-        afterTurn: vi.fn(),
-        prepareChildSpawn,
-      },
+      lifecycle: { bootstrap: vi.fn(), afterTurn: vi.fn() },
       tools: {
         getToolDefinitions: vi.fn().mockReturnValue([]),
         executeTool: vi.fn(),
       },
+      resolver: { resolve: vi.fn(), create: resolverCreate },
       splitGuard: splitGuard as never,
       hooks: {
         onSessionFork: vi.fn(),
@@ -362,27 +357,23 @@ describe('StelloEngineImpl', () => {
     const child = await engine.forkSession({ label: 'UI', scope: 'ui' });
 
     expect(splitGuard.checkCanSplit).toHaveBeenCalledWith('s1');
-    expect(prepareChildSpawn).toHaveBeenCalledWith({
-      parentId: 's1',
-      label: 'UI',
-      scope: 'ui',
-    });
+    expect(createChild).toHaveBeenCalledWith(expect.objectContaining({
+      parentId: 's1', label: 'UI', scope: 'ui',
+    }));
     expect(splitGuard.recordSplit).toHaveBeenCalledWith('s1', 3);
     expect(child.id).toBe('child-1');
   });
 
   describe('stello_create_session 内置拦截', () => {
     it('executeTool 拦截 stello_create_session，走 forkSession 完整路径', async () => {
-      const childNode = {
-        id: 'child-1',
-        parentId: 's1',
-        children: [],
-        refs: [],
-        depth: 1,
-        index: 0,
-        label: 'UI',
-      };
-      const prepareChildSpawn = vi.fn().mockResolvedValue(childNode);
+      const createChild = vi.fn().mockResolvedValue({
+        id: 'child-1', parentId: 's1', children: [], refs: [],
+        depth: 1, index: 0, label: 'UI',
+      });
+      const resolverCreate = vi.fn().mockResolvedValue({
+        id: 'child-1', meta: { id: 'child-1', turnCount: 0, status: 'active' },
+        turnCount: 0, send: vi.fn(), consolidate: vi.fn(),
+      });
 
       const engine = new StelloEngineImpl({
         session: {
@@ -392,19 +383,11 @@ describe('StelloEngineImpl', () => {
           send: vi.fn(),
           consolidate: vi.fn(),
         },
-        sessions,
-        memory,
-        skills,
-        confirm,
-        lifecycle: {
-          bootstrap: vi.fn(),
-          afterTurn: vi.fn(),
-          prepareChildSpawn,
-        },
-        tools: {
-          getToolDefinitions: vi.fn().mockReturnValue([]),
-          executeTool: vi.fn(),
-        },
+        sessions: { ...sessions, createChild } as unknown as SessionTree,
+        memory, skills, confirm,
+        lifecycle: { bootstrap: vi.fn(), afterTurn: vi.fn() },
+        tools: { getToolDefinitions: vi.fn().mockReturnValue([]), executeTool: vi.fn() },
+        resolver: { resolve: vi.fn(), create: resolverCreate },
       });
 
       const result = await engine.executeTool('stello_create_session', {
@@ -416,14 +399,12 @@ describe('StelloEngineImpl', () => {
 
       expect(result.success).toBe(true);
       expect(result.data).toEqual({ sessionId: 'child-1', label: 'UI' });
-      expect(prepareChildSpawn).toHaveBeenCalledWith({
-        parentId: 's1',
+      expect(resolverCreate).toHaveBeenCalledWith('child-1', expect.objectContaining({
         label: 'UI',
         systemPrompt: 'you are a UI expert',
         prompt: 'hello',
         context: 'inherit',
-        metadata: { sourceSessionId: 's1' },
-      });
+      }));
     });
 
     it('forkSession 失败时 executeTool 返回 error', async () => {
@@ -447,7 +428,7 @@ describe('StelloEngineImpl', () => {
         lifecycle: {
           bootstrap: vi.fn(),
           afterTurn: vi.fn(),
-          prepareChildSpawn: vi.fn(),
+  
         },
         tools: {
           getToolDefinitions: vi.fn().mockReturnValue([]),
@@ -478,7 +459,7 @@ describe('StelloEngineImpl', () => {
         lifecycle: {
           bootstrap: vi.fn(),
           afterTurn: vi.fn(),
-          prepareChildSpawn: vi.fn(),
+  
         },
         tools: {
           getToolDefinitions: vi.fn().mockReturnValue([]),
@@ -512,7 +493,7 @@ describe('StelloEngineImpl', () => {
         lifecycle: {
           bootstrap: vi.fn(),
           afterTurn: vi.fn(),
-          prepareChildSpawn: vi.fn(),
+  
         },
         tools: {
           getToolDefinitions: vi.fn().mockReturnValue([userTool]),
@@ -529,8 +510,12 @@ describe('StelloEngineImpl', () => {
 
     it('用户通过 tools 调用 stello_create_session 时，Engine 拦截而非透传', async () => {
       const userExecuteTool = vi.fn();
-      const prepareChildSpawn = vi.fn().mockResolvedValue({
+      const createChild = vi.fn().mockResolvedValue({
         id: 'c1', parentId: 's1', children: [], refs: [], depth: 1, index: 0, label: 'test',
+      });
+      const resolverCreate = vi.fn().mockResolvedValue({
+        id: 'c1', meta: { id: 'c1', turnCount: 0, status: 'active' },
+        turnCount: 0, send: vi.fn(), consolidate: vi.fn(),
       });
 
       const engine = new StelloEngineImpl({
@@ -541,25 +526,17 @@ describe('StelloEngineImpl', () => {
           send: vi.fn(),
           consolidate: vi.fn(),
         },
-        sessions,
-        memory,
-        skills,
-        confirm,
-        lifecycle: {
-          bootstrap: vi.fn(),
-          afterTurn: vi.fn(),
-          prepareChildSpawn,
-        },
-        tools: {
-          getToolDefinitions: vi.fn().mockReturnValue([]),
-          executeTool: userExecuteTool,
-        },
+        sessions: { ...sessions, createChild } as unknown as SessionTree,
+        memory, skills, confirm,
+        lifecycle: { bootstrap: vi.fn(), afterTurn: vi.fn() },
+        tools: { getToolDefinitions: vi.fn().mockReturnValue([]), executeTool: userExecuteTool },
+        resolver: { resolve: vi.fn(), create: resolverCreate },
       });
 
       await engine.executeTool('stello_create_session', { label: 'test' });
 
       expect(userExecuteTool).not.toHaveBeenCalled();
-      expect(prepareChildSpawn).toHaveBeenCalled();
+      expect(resolverCreate).toHaveBeenCalled();
     });
 
     it('指定 profile 时，合成 systemPrompt 并透传 resolved', async () => {
@@ -574,9 +551,13 @@ describe('StelloEngineImpl', () => {
         context: 'inherit',
       });
 
-      const prepareChildSpawn = vi.fn().mockResolvedValue({
+      const createChild = vi.fn().mockResolvedValue({
         id: 'c1', parentId: 's1', children: [], refs: [],
         depth: 1, index: 0, label: '深度研究',
+      });
+      const resolverCreate = vi.fn().mockResolvedValue({
+        id: 'c1', meta: { id: 'c1', turnCount: 0, status: 'active' },
+        turnCount: 0, send: vi.fn(), consolidate: vi.fn(),
       });
 
       const engine = new StelloEngineImpl({
@@ -587,13 +568,12 @@ describe('StelloEngineImpl', () => {
           send: vi.fn(),
           consolidate: vi.fn(),
         },
-        sessions,
-        memory,
-        skills,
-        confirm,
-        lifecycle: { bootstrap: vi.fn(), afterTurn: vi.fn(), prepareChildSpawn },
+        sessions: { ...sessions, createChild } as unknown as SessionTree,
+        memory, skills, confirm,
+        lifecycle: { bootstrap: vi.fn(), afterTurn: vi.fn() },
         tools: { getToolDefinitions: vi.fn().mockReturnValue([]), executeTool: vi.fn() },
         profiles: profileRegistry,
+        resolver: { resolve: vi.fn(), create: resolverCreate },
       });
 
       await engine.executeTool('stello_create_session', {
@@ -602,7 +582,7 @@ describe('StelloEngineImpl', () => {
         profile: 'research',
       });
 
-      expect(prepareChildSpawn).toHaveBeenCalledWith(expect.objectContaining({
+      expect(resolverCreate).toHaveBeenCalledWith('c1', expect.objectContaining({
         label: '深度研究',
         systemPrompt: '你是研究助手\n\n当前话题是量子计算',
         context: 'inherit',
@@ -628,7 +608,7 @@ describe('StelloEngineImpl', () => {
         memory,
         skills,
         confirm,
-        lifecycle: { bootstrap: vi.fn(), afterTurn: vi.fn(), prepareChildSpawn: vi.fn() },
+        lifecycle: { bootstrap: vi.fn(), afterTurn: vi.fn() },
         tools: { getToolDefinitions: vi.fn().mockReturnValue([]), executeTool: vi.fn() },
         profiles: profileRegistry,
       });
@@ -649,9 +629,13 @@ describe('StelloEngineImpl', () => {
         systemPromptMode: 'preset',
       });
 
-      const prepareChildSpawn = vi.fn().mockResolvedValue({
+      const createChild = vi.fn().mockResolvedValue({
         id: 'c1', parentId: 's1', children: [], refs: [],
         depth: 1, index: 0, label: 'test',
+      });
+      const resolverCreate = vi.fn().mockResolvedValue({
+        id: 'c1', meta: { id: 'c1', turnCount: 0, status: 'active' },
+        turnCount: 0, send: vi.fn(), consolidate: vi.fn(),
       });
 
       const engine = new StelloEngineImpl({
@@ -662,13 +646,12 @@ describe('StelloEngineImpl', () => {
           send: vi.fn(),
           consolidate: vi.fn(),
         },
-        sessions,
-        memory,
-        skills,
-        confirm,
-        lifecycle: { bootstrap: vi.fn(), afterTurn: vi.fn(), prepareChildSpawn },
+        sessions: { ...sessions, createChild } as unknown as SessionTree,
+        memory, skills, confirm,
+        lifecycle: { bootstrap: vi.fn(), afterTurn: vi.fn() },
         tools: { getToolDefinitions: vi.fn().mockReturnValue([]), executeTool: vi.fn() },
         profiles: profileRegistry,
+        resolver: { resolve: vi.fn(), create: resolverCreate },
       });
 
       await engine.executeTool('stello_create_session', {
@@ -677,7 +660,7 @@ describe('StelloEngineImpl', () => {
         profile: 'strict',
       });
 
-      expect(prepareChildSpawn).toHaveBeenCalledWith(
+      expect(resolverCreate).toHaveBeenCalledWith('c1',
         expect.objectContaining({ systemPrompt: '固定角色' }),
       );
     });
@@ -699,7 +682,7 @@ describe('StelloEngineImpl', () => {
         memory,
         skills,
         confirm,
-        lifecycle: { bootstrap: vi.fn(), afterTurn: vi.fn(), prepareChildSpawn: vi.fn() },
+        lifecycle: { bootstrap: vi.fn(), afterTurn: vi.fn() },
         tools: { getToolDefinitions: vi.fn().mockReturnValue([]), executeTool: vi.fn() },
         profiles: profileRegistry,
       });
@@ -713,7 +696,8 @@ describe('StelloEngineImpl', () => {
   });
 
   it('splitGuard 拒绝时不会创建子 session', async () => {
-    const prepareChildSpawn = vi.fn();
+    const createChild = vi.fn();
+    const resolverCreate = vi.fn();
     const splitGuard = {
       checkCanSplit: vi.fn().mockResolvedValue({ canSplit: false, reason: 'turns not enough' }),
       recordSplit: vi.fn(),
@@ -727,24 +711,16 @@ describe('StelloEngineImpl', () => {
         send: vi.fn(),
         consolidate: vi.fn(),
       },
-      sessions,
-      memory,
-      skills,
-      confirm,
-      lifecycle: {
-        bootstrap: vi.fn(),
-        afterTurn: vi.fn(),
-        prepareChildSpawn,
-      },
-      tools: {
-        getToolDefinitions: vi.fn().mockReturnValue([]),
-        executeTool: vi.fn(),
-      },
+      sessions: { ...sessions, createChild } as unknown as SessionTree,
+      memory, skills, confirm,
+      lifecycle: { bootstrap: vi.fn(), afterTurn: vi.fn() },
+      tools: { getToolDefinitions: vi.fn().mockReturnValue([]), executeTool: vi.fn() },
+      resolver: { resolve: vi.fn(), create: resolverCreate },
       splitGuard: splitGuard as never,
     });
 
     await expect(engine.forkSession({ label: 'UI' })).rejects.toThrow('turns not enough');
-    expect(prepareChildSpawn).not.toHaveBeenCalled();
+    expect(createChild).not.toHaveBeenCalled();
   });
 
   describe('forkSession 新路径（resolver.create）', () => {
@@ -783,27 +759,7 @@ describe('StelloEngineImpl', () => {
       expect(child.id).toBe('child-1');
     });
 
-    it('无 resolver.create 时 fallback 到 prepareChildSpawn', async () => {
-      const prepareChildSpawn = vi.fn().mockResolvedValue({
-        id: 'child-1', parentId: 's1', children: [], refs: [],
-        depth: 1, index: 0, label: 'UI',
-      });
-
-      const engine = new StelloEngineImpl({
-        session: {
-          id: 's1', meta: { id: 's1', turnCount: 0, status: 'active' as const },
-          turnCount: 0, send: vi.fn(), consolidate: vi.fn(),
-        },
-        sessions, memory, skills, confirm,
-        lifecycle: { bootstrap: vi.fn(), afterTurn: vi.fn(), prepareChildSpawn },
-        tools: { getToolDefinitions: vi.fn().mockReturnValue([]), executeTool: vi.fn() },
-      });
-
-      await engine.forkSession({ label: 'UI' });
-      expect(prepareChildSpawn).toHaveBeenCalled();
-    });
-
-    it('两者都没有时抛错', async () => {
+    it('无 resolver.create 时抛错', async () => {
       const engine = new StelloEngineImpl({
         session: {
           id: 's1', meta: { id: 's1', turnCount: 0, status: 'active' as const },

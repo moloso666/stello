@@ -47,7 +47,7 @@ describe('StelloAgent', () => {
             session: rootSession,
           }),
           afterTurn: vi.fn(),
-          prepareChildSpawn: vi.fn(),
+
         },
         tools: {
           getToolDefinitions: vi.fn().mockReturnValue([]),
@@ -149,9 +149,13 @@ describe('StelloAgent', () => {
       consolidate: vi.fn(),
     };
 
-    const prepareChildSpawn = vi
-      .fn()
-      .mockResolvedValue({ id: 'child-2', parentId: 'root', children: [], refs: [], depth: 1, index: 1, label: 'UI 2' });
+    const resolverCreate = vi.fn().mockResolvedValue({
+      id: 'child-2', meta: { id: 'child-2', turnCount: 0, status: 'active' },
+      turnCount: 0, send: vi.fn(), consolidate: vi.fn(),
+    });
+    const createChild = vi.fn().mockResolvedValue({
+      id: 'child-2', parentId: 'root', children: [], refs: [], depth: 1, index: 1, label: 'UI 2',
+    });
 
     const agent = createStelloAgent({
       sessions: {
@@ -163,13 +167,13 @@ describe('StelloAgent', () => {
         getNode: vi.fn().mockResolvedValue(childNode),
         getRoot: vi.fn().mockResolvedValue(rootSession),
         archive: vi.fn(),
+        createChild,
       } as unknown as SessionTree,
       memory: {} as MemoryEngine,
       capabilities: {
         lifecycle: {
           bootstrap: vi.fn(),
           afterTurn: vi.fn(),
-          prepareChildSpawn,
         },
         tools: {
           getToolDefinitions: vi.fn().mockReturnValue([]),
@@ -189,6 +193,7 @@ describe('StelloAgent', () => {
             if (id === 'child-1') return childRuntime;
             throw new Error(`unexpected session: ${id}`);
           }),
+          create: resolverCreate,
         },
       },
       orchestration: {
@@ -201,12 +206,14 @@ describe('StelloAgent', () => {
 
     const result = await agent.forkSession('child-1', { label: 'UI 2', scope: 'ui' });
 
-    expect(prepareChildSpawn).toHaveBeenCalledWith({
+    expect(createChild).toHaveBeenCalledWith(expect.objectContaining({
       label: 'UI 2',
       scope: 'ui',
-      metadata: { sourceSessionId: 'child-1' },
       parentId: 'root',
-    });
+    }));
+    expect(resolverCreate).toHaveBeenCalledWith('child-2', expect.objectContaining({
+      label: 'UI 2',
+    }));
     expect(result.parentId).toBe('root');
   });
 
@@ -339,7 +346,7 @@ describe('StelloAgent', () => {
             session: rootSession,
           }),
           afterTurn: vi.fn(),
-          prepareChildSpawn: vi.fn(),
+
         },
         tools: {
           getToolDefinitions: vi.fn().mockReturnValue([]),

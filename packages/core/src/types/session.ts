@@ -86,7 +86,7 @@ export interface CreateSessionOptions {
   label: string;
   /** 作用域标签 */
   scope?: string;
-  /** 系统提示词；不提供则由 prepareChildSpawn 实现决定（通常继承父 Session） */
+  /** 系统提示词；不提供则由 sessionCreator 实现决定（通常继承父 Session） */
   systemPrompt?: string;
   /** 子 Session 的第一条 assistant 开场消息 */
   prompt?: string;
@@ -98,7 +98,7 @@ export interface CreateSessionOptions {
   tags?: string[];
   /**
    * Profile 解析后的运行时配置（由 Engine 填充，开发者不需要手动设置）。
-   * prepareChildSpawn 实现者应将这些值传给 session.fork()。
+   * sessionCreator 实现者应将这些值传给 session 创建函数。
    */
   resolved?: {
     /** 覆盖子 Session 的 LLM 适配器 */

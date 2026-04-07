@@ -17,7 +17,7 @@ import type {
 } from './lifecycle';
 import type { EngineRuntimeSession, EngineStreamResult, EngineTurnResult } from '../engine/stello-engine';
 import type { TurnRunnerOptions } from '../engine/turn-runner';
-import type { LLMAdapter, LLMCompleteOptions, ForkContextFn } from '@stello-ai/session';
+import type { CreateSessionOptions } from './session';
 
 // ─── 策略配置 ───
 
@@ -104,26 +104,13 @@ export interface StelloEngine {
 
 // ─── Session Runtime 解析器 ───
 
-/** Session 创建参数（Engine fork 时传给 resolver.create） */
-export interface SessionRuntimeCreateOptions {
-  label: string
-  systemPrompt?: string
-  prompt?: string
-  context?: 'none' | 'inherit'
-  metadata?: Record<string, unknown>
-  tags?: string[]
-  /** Profile 解析后的运行时配置 */
-  resolved?: {
-    llm?: LLMAdapter
-    tools?: LLMCompleteOptions['tools']
-    contextFn?: ForkContextFn
-  }
-}
+/** Session 创建参数（Engine fork 时传给 resolver.create），从 CreateSessionOptions 派生 */
+export type SessionRuntimeCreateOptions = Omit<CreateSessionOptions, 'parentId'>
 
 /** Session runtime 解析器 */
 export interface SessionRuntimeResolver {
   /** 根据 sessionId 解析出对应 runtime session */
   resolve(sessionId: string): Promise<EngineRuntimeSession>
-  /** 创建新 session runtime。提供后 Engine 接管 fork 编排，不再需要 prepareChildSpawn。 */
+  /** 创建新 session runtime。提供后 Engine 接管 fork 编排。 */
   create?(sessionId: string, options: SessionRuntimeCreateOptions): Promise<EngineRuntimeSession>
 }

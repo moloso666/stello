@@ -58,7 +58,7 @@ export interface StelloAgentCapabilitiesConfig {
 export interface StelloAgentSessionConfig {
   /** 按 sessionId 解析真实 Session */
   sessionResolver?: (sessionId: string) => Promise<SessionCompatible>;
-  /** 创建新 session 的工厂。提供后 Engine 接管 fork 编排，不再需要 prepareChildSpawn。 */
+  /** 创建新 session 的工厂。提供后 Engine 接管 fork 编排。 */
   sessionCreator?: (sessionId: string, options: SessionRuntimeCreateOptions) => Promise<SessionCompatible>;
   /** 解析 MainSession（可选，仅在需要 integration 时提供） */
   mainSessionResolver?: () => Promise<MainSessionCompatible | null>;
