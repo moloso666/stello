@@ -20,7 +20,6 @@ export type { FileSystemAdapter } from './types/fs';
 export type {
   BootstrapResult,
   AfterTurnResult,
-  LifecycleHooks,
   Skill,
   SkillRouter,
   ToolDefinition,

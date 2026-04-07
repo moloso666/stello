@@ -1,6 +1,6 @@
 // ─── 生命周期钩子 + Skill + 确认协议 + Agent Tools 类型定义 ───
 
-import type { SessionMeta, TopologyNode, CreateSessionOptions } from './session';
+import type { SessionMeta, TopologyNode } from './session';
 import type { AssembledContext, TurnRecord } from './memory';
 
 // ─── 生命周期钩子 ───
@@ -21,29 +21,6 @@ export interface AfterTurnResult {
 	memoryUpdated: boolean;
 	/** L3 原始记录是否追加成功 */
 	recordAppended: boolean;
-}
-
-/**
- * 生命周期钩子
- *
- * 串联 Session 系统、记忆系统、文件系统的执行时序。
- * 所有钩子有默认实现，开发者可选择性覆盖。失败不阻塞对话。
- */
-export interface LifecycleHooks {
-	/** 进入 Session 时：读 L1 + memory.md，按继承策略组装上下文 */
-	bootstrap?(sessionId: string): Promise<BootstrapResult>;
-/** 每轮结束：提取写 L1 + 更新 memory.md + 追加 records.jsonl + 触发父 index.md 更新 */
-	afterTurn?(
-		sessionId: string,
-		userMsg: TurnRecord,
-		assistantMsg: TurnRecord,
-	): Promise<AfterTurnResult>;
-	/** context 接近上限时：压缩旧内容存入 memory.md（v0.1 只留接口） */
-	compact?(sessionId: string): Promise<void>;
-	/** 切换 Session：旧 Session 更新 memory.md → 新 Session bootstrap */
-	onSessionSwitch?(fromId: string, toId: string): Promise<BootstrapResult>;
-	/** 创建子 Session 前：创建文件夹 + meta.json + 空 memory.md + 生成 scope.md + 更新父 index.md */
-	prepareChildSpawn?(options: CreateSessionOptions): Promise<TopologyNode>;
 }
 
 // ─── Skill 插槽 ───

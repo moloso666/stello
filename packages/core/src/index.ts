@@ -22,7 +22,6 @@ export type {
   // 生命周期钩子
   BootstrapResult,
   AfterTurnResult,
-  LifecycleHooks,
   // Skill 插槽
   Skill,
   SkillRouter,
