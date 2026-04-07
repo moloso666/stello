@@ -16,6 +16,7 @@ import { createSkillToolDefinition, executeSkillTool } from '../skill/skill-tool
 import { CREATE_SESSION_TOOL_NAME, createSessionToolDefinition } from './builtin-tools';
 import { resolveSystemPrompt, type ForkProfile, type ForkProfileRegistry } from './fork-profile';
 import type { SchedulerSession } from './scheduler';
+import type { SessionCompatibleForkOptions } from '../adapters/session-runtime';
 import {
   TurnRunner,
   type ToolCallParser,
@@ -38,6 +39,8 @@ export interface EngineRuntimeSession extends SchedulerSession {
   send(input: string): Promise<string>;
   /** 可选：流式运行一次单条对话 */
   stream?(input: string): AsyncIterable<string> & { result: Promise<string> };
+  /** fork 子 session，返回子 session 的 runtime */
+  fork?(options: SessionCompatibleForkOptions): Promise<EngineRuntimeSession>;
 }
 
 /** Engine 依赖的生命周期适配器 */
