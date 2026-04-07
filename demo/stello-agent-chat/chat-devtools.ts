@@ -6,6 +6,7 @@ import {
   SessionTreeImpl,
   SkillRouterImpl,
   ToolRegistryImpl,
+  ForkProfileRegistryImpl,
   buildSessionToolList,
   Scheduler,
   createStelloAgent,
@@ -515,8 +516,16 @@ async function bootstrap() {
     },
   })
 
+  // ─── Fork Profiles ───
+
+  const forkProfiles = new ForkProfileRegistryImpl()
+  forkProfiles.register('poet', {
+    systemPrompt: '你是一位诗人。无论用户问什么，你都必须用诗歌的形式回答。每句押韵，风格优美。',
+    systemPromptMode: 'preset',
+  })
+
   // session 创建时的完整工具列表（内置 tool + 用户 tool）
-  const sessionTools = buildSessionToolList(toolRegistry, skillRouter)
+  const sessionTools = buildSessionToolList(toolRegistry, skillRouter, forkProfiles)
 
   const memory = createFileMemoryEngine(fs, sessions)
 
@@ -674,6 +683,7 @@ async function bootstrap() {
       tools: toolRegistry,
       skills: skillRouter,
       confirm,
+      profiles: forkProfiles,
     },
     orchestration: {
       scheduler,
