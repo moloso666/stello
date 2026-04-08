@@ -20,7 +20,7 @@ export interface SessionMeta {
   status: SessionStatus;
   /** 对话轮次数 */
   turnCount: number;
-  /** 开发者自定义元数据 */
+  /** 开发者自定义元数据（`_stello` 为框架保留前缀，请勿覆盖） */
   metadata: Record<string, unknown>;
   /** 自由标签 */
   tags: string[];

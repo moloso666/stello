@@ -24,6 +24,14 @@ export interface ForkProfile {
   context?: 'none' | 'inherit'
   /** 自定义上下文转换函数（优先于 context 字段） */
   contextFn?: ForkContextFn
+  /**
+   * 可用 skill 白名单
+   *
+   * - `undefined`（不传）：继承全局所有 skills
+   * - `['a', 'b']`：只能 activate_skill 白名单内的 skills
+   * - `[]`（空数组）：完全禁用 activate_skill 工具
+   */
+  skills?: string[]
 }
 
 /**

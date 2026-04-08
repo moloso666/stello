@@ -21,11 +21,13 @@ import {
 import {
   fetchSessionTree,
   fetchConfig,
+  fetchSessionCapabilities,
   fetchSessionDetail,
   enterSession,
   consolidateSession,
   sendTurn,
   type AgentConfig,
+  type SessionCapabilities,
   type SessionDetail,
   type SessionTreeNode,
   type TurnRecord,
@@ -505,7 +507,7 @@ function parseThinkContent(text: string): { think: string | null; content: strin
 function MarkdownMessage({ text, streaming }: { text: string; streaming?: boolean }) {
   const { t } = useI18n()
   const { think, content } = useMemo(() => parseThinkContent(text), [text])
-  const displayText = content || (streaming ? '' : text)
+  const displayText = content
   const showReasoning = Boolean(think)
   const reasoningLabel = streaming ? t('conv.thinking') : t('conv.thinkingDone')
 
@@ -605,6 +607,7 @@ export function Conversation() {
   const [filterText, setFilterText] = useState('')
   const [items, setItems] = useState<ChatItem[]>([])
   const [detail, setDetail] = useState<SessionDetail | null>(null)
+  const [sessionCapabilities, setSessionCapabilities] = useState<SessionCapabilities | null>(null)
   const [activeTab, setActiveTab] = useState<'l3' | 'l2' | 'insights' | 'prompt'>('l3')
   const [inputValue, setInputValue] = useState('')
   const [sendingSessions, setSendingSessions] = useState<Set<string>>(new Set())
@@ -695,10 +698,13 @@ export function Conversation() {
   /* 切换 session 时拉取 detail（L2/scope）+ 历史 records */
   useEffect(() => {
     if (!selectedSession) return
+    let cancelled = false
     setItems([])
     setDetail(null)
+    setSessionCapabilities(null)
     fetchSessionDetail(selectedSession.id)
       .then((d) => {
+        if (cancelled) return
         setDetail(d)
         const records = d?.records ?? []
         if (records.length > 0) {
@@ -706,8 +712,19 @@ export function Conversation() {
         }
       })
       .catch(() => {
+        if (cancelled) return
         setDetail(null)
       })
+    fetchSessionCapabilities(selectedSession.id)
+      .then((caps) => {
+        if (cancelled) return
+        setSessionCapabilities(caps)
+      })
+      .catch(() => {
+        if (cancelled) return
+        setSessionCapabilities(null)
+      })
+    return () => { cancelled = true }
   }, [selectedSession?.id])
 
   /* 消息列表自动滚到底部 */
@@ -847,13 +864,13 @@ export function Conversation() {
               icon={Zap}
               iconClass="text-[#D89575]"
               label={t('conv.skills')}
-              items={(config?.capabilities.skills ?? []).map((s) => ({ name: s.name, description: s.description }))}
+              items={(sessionCapabilities?.skills ?? config?.capabilities.skills ?? []).map((s) => ({ name: s.name, description: s.description }))}
             />
             <CapabilityPopover
               icon={Wrench}
               iconClass="text-text-secondary"
               label={t('conv.tools')}
-              items={config?.capabilities.tools ?? []}
+              items={sessionCapabilities?.tools ?? config?.capabilities.tools ?? []}
             />
           </div>
         </div>
