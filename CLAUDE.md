@@ -148,7 +148,7 @@ Session 是独立对话单元，不知道树的存在。树状拓扑由 **Topolo
 | system prompt | 全局共享 |
 | ToolRegistry | 应用层工具注册（`register(tool)`），Engine 自动合并内置 tool + 用户 tool |
 | SessionRuntimeResolver | Session 加载（`resolve`），Engine 通过 `session.fork()` 创建子 Session |
-| ForkProfile | 预注册的 fork 配置模板（systemPrompt 合成策略 + LLM/tools/context 预设） |
+| ForkProfile | 预注册的 fork 配置模板（systemPrompt 合成策略 + LLM/tools/context/skills 预设） |
 
 ConsolidateFn 和 IntegrateFn 是**配对函数**——ConsolidateFn 输出某种格式的 L2，IntegrateFn 读取该格式。框架对 L2 内容格式完全无感知。
 

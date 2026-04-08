@@ -32,7 +32,7 @@ Engine 不感知树结构，不知道其他 Session 的存在，**也不知道 S
 
 Engine 负责 fork 的完整编排：创建拓扑节点（topology-first，生成 ID）→ 调用 `session.fork({ id, ... })` 创建 session 实例 → 触发事件。session.fork() 天然处理 systemPrompt 继承、context 继承（含 contextFn）、prompt 写入、LLM/tools 覆盖。Orchestrator 分离"拓扑父节点"（策略决定）与"fork 来源 session"（继承内容来源）。
 
-内置 tool（stello_create_session、activate_skill）由 Engine 在 executeTool 中拦截，不透传给用户工具运行时。LLM 调用 stello_create_session 时，Engine 先解析 ForkProfile（如有），合成 systemPrompt，profile 的 contextFn/llm/tools 直接映射到 fork 选项，再走 forkSession 完整路径。
+内置 tool（stello_create_session、activate_skill）由 Engine 在 executeTool 中拦截，不透传给用户工具运行时。LLM 调用 stello_create_session 时，Engine 先解析 ForkProfile（如有），合成 systemPrompt，profile 的 contextFn/llm/tools 直接映射到 fork 选项，profile.skills 白名单写入 session metadata（`_stello.allowedSkills`），再走 forkSession 完整路径。Factory 创建子 Engine 时读取 metadata，按需用 FilteredSkillRouter 包装全局 SkillRouter。
 
 ### 工具注册与内置工具
 
