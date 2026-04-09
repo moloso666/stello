@@ -6,6 +6,46 @@ import type { Message } from './types/llm.js'
 import type { ConsolidateFn, CreateSessionOptions, LoadSessionOptions, SendResult, StreamResult } from './types/functions.js'
 import { assembleSessionContext, createBuiltinCompressFn, type CompressionCache } from './context-utils.js'
 
+/** 裁掉尾部不完整的 tool call 组（assistant 有 toolCalls 但缺少对应 tool 结果） */
+function trimIncompleteToolCallGroup(records: Message[]): Message[] {
+  if (records.length === 0) return records
+  let end = records.length
+  while (end > 0) {
+    const last = records[end - 1]!
+    if (last.role === 'assistant' && last.toolCalls && last.toolCalls.length > 0) {
+      // assistant 有 toolCalls 但后面没有 tool 消息 → 裁掉
+      end--
+      continue
+    }
+    if (last.role === 'tool') {
+      // tool 消息，向前找到对应的 assistant
+      let assistantIdx = end - 2
+      while (assistantIdx >= 0 && records[assistantIdx]!.role === 'tool') {
+        assistantIdx--
+      }
+      if (assistantIdx >= 0) {
+        const assistant = records[assistantIdx]!
+        if (assistant.role === 'assistant' && assistant.toolCalls && assistant.toolCalls.length > 0) {
+          const expectedIds = new Set(assistant.toolCalls.map(tc => tc.id))
+          for (let j = assistantIdx + 1; j < end; j++) {
+            const rec = records[j]!
+            if (rec.role === 'tool' && rec.toolCallId) {
+              expectedIds.delete(rec.toolCallId)
+            }
+          }
+          if (expectedIds.size > 0) {
+            // 不完整 → 裁掉整个组
+            end = assistantIdx
+            continue
+          }
+        }
+      }
+    }
+    break
+  }
+  return end === records.length ? records : records.slice(0, end)
+}
+
 interface ToolResultEnvelope {
   toolResults: Array<{
     toolCallId: string | null
@@ -385,7 +425,9 @@ function buildSession(
       const ctx = forkOptions.context ?? 'none'
       if (ctx !== 'none') {
         const parentRecords = await storage.listRecords(currentMeta.id)
-        const records = ctx === 'inherit' ? parentRecords : await ctx(parentRecords)
+        const selected = ctx === 'inherit' ? parentRecords : await ctx(parentRecords)
+        // 裁掉尾部不完整的 tool call 组（fork 发生在 tool 执行中，tool result 还没写入）
+        const records = trimIncompleteToolCallGroup(selected)
         for (const record of records) {
           await storage.appendRecord(childId, record)
         }

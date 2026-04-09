@@ -108,7 +108,9 @@ export class SessionOrchestrator {
       const oldSessionId = this.lastActiveSessionId;
       if (oldSessionId && oldSessionId !== sessionId && this.scheduling) {
         // fire-and-forget：对离开的 session 触发 onSwitch 调度
-        this.triggerSwitchScheduling(oldSessionId).catch(() => {});
+        this.triggerSwitchScheduling(oldSessionId).catch((err) => {
+          console.error(`[orchestrator] triggerSwitchScheduling ERROR session=${oldSessionId}`, err);
+        });
       }
       this.lastActiveSessionId = sessionId;
       await this.requireSession(sessionId);

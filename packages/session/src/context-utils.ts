@@ -27,7 +27,7 @@ function estimateTokens(messages: Message[]): number {
   return messages.reduce((sum, m) => sum + Math.ceil(m.content.length / 4), 0)
 }
 
-/** 按 token 预算从最近的 L3 往前填充 */
+/** 按 token 预算从最近的 L3 往前填充，保证 tool call 组完整性 */
 function selectHistoryByBudget(
   history: Message[],
   budgetTokens: number,
@@ -39,6 +39,31 @@ function selectHistoryByBudget(
     if (usedTokens + msgTokens > budgetTokens) break
     usedTokens += msgTokens
     startIndex = i
+  }
+  // 确保不从 tool call 组中间截断：如果 startIndex 落在 tool 消息上，
+  // 向前找到对应的 assistant(toolCalls) 并一起包含；若预算不够则跳过整个组
+  while (startIndex < history.length) {
+    const msg = history[startIndex]
+    if (msg.role === 'tool') {
+      // 向前找 assistant(toolCalls)
+      let assistantIdx = startIndex - 1
+      while (assistantIdx >= 0 && history[assistantIdx].role === 'tool') {
+        assistantIdx--
+      }
+      if (assistantIdx >= 0 && history[assistantIdx].role === 'assistant' && history[assistantIdx].toolCalls?.length) {
+        startIndex = assistantIdx
+      } else {
+        // 找不到对应的 assistant → 跳过这些孤立 tool 消息
+        startIndex++
+        continue
+      }
+      break
+    }
+    if (msg.role === 'assistant' && msg.toolCalls?.length) {
+      // 已经在 assistant(toolCalls) 上，检查后面的 tool 消息是否都在范围内
+      break
+    }
+    break
   }
   return history.slice(startIndex)
 }
