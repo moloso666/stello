@@ -32,6 +32,8 @@ export interface ForkProfile {
    * - `[]`（空数组）：完全禁用 activate_skill 工具
    */
   skills?: string[]
+  /** 子会话的第一条 assistant 开场消息（优先于 LLM 提供的 prompt） */
+  prompt?: string
 }
 
 /**

@@ -374,10 +374,13 @@ export class StelloEngineImpl implements StelloEngine {
         stelloMeta.allowedSkills = profile.skills
       }
 
+      // prompt：profile 优先，LLM 提供的作为 fallback
+      const prompt = profile?.prompt ?? (args.prompt as string | undefined);
+
       const child = await this.forkSession({
         label: args.label as string,
         systemPrompt,
-        prompt: args.prompt as string | undefined,
+        prompt,
         context,
         llm: profile?.llm,
         tools: profile?.tools,
