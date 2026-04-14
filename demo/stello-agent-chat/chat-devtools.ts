@@ -9,6 +9,8 @@ import {
   ToolRegistryImpl,
   ForkProfileRegistryImpl,
   buildSessionToolList,
+  createBuiltinToolEntries,
+  CompositeToolRuntime,
   Scheduler,
   createStelloAgent,
   type ConfirmProtocol,
@@ -553,7 +555,9 @@ export async function bootstrap() {
   })
 
   // session 创建时的完整工具列表（内置 tool + 用户 tool）
-  const sessionTools = buildSessionToolList(toolRegistry, skillRouter, forkProfiles)
+  const builtinEntries = createBuiltinToolEntries(skillRouter, forkProfiles)
+  const compositeRuntime = new CompositeToolRuntime(builtinEntries, toolRegistry)
+  const sessionTools = buildSessionToolList(compositeRuntime)
 
   const memory = createFileMemoryEngine(fs, sessions)
 

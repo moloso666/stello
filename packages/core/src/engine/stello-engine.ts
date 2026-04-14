@@ -11,9 +11,8 @@ import type {
 import type { StelloEngine, StelloEventMap, EngineForkOptions } from '../types/engine';
 import type { TopologyNode } from '../types/session';
 import type { SplitGuard } from '../session/split-guard';
-import { createSkillToolDefinition, executeSkillTool } from '../skill/skill-tool';
-import { CREATE_SESSION_TOOL_NAME, createSessionToolDefinition } from './builtin-tools';
 import { resolveSystemPrompt, type ForkProfile, type ForkProfileRegistry } from './fork-profile';
+import { createBuiltinToolEntries, CompositeToolRuntime } from '../tool/tool-registry';
 import type { SchedulerSession } from './scheduler';
 import type { SessionCompatibleForkOptions } from '../adapters/session-runtime';
 import {
@@ -130,7 +129,7 @@ export class StelloEngineImpl implements StelloEngine {
 
   private readonly session: EngineRuntimeSession;
   private readonly lifecycle: EngineLifecycleAdapter;
-  private readonly tools: EngineToolRuntime;
+  private readonly compositeTools: EngineToolRuntime;
   private readonly splitGuard?: SplitGuard;
   private readonly turnRunner: TurnRunner;
   private readonly hooks: Partial<EngineHooks>;
@@ -144,7 +143,6 @@ export class StelloEngineImpl implements StelloEngine {
     this.skills = options.skills;
     this.confirm = options.confirm;
     this.lifecycle = options.lifecycle;
-    this.tools = options.tools;
     this.splitGuard = options.splitGuard;
     this.hooks = options.hooks ?? {};
     this.profiles = options.profiles;
@@ -155,6 +153,14 @@ export class StelloEngineImpl implements StelloEngine {
           return { content: raw, toolCalls: [] };
         },
       } satisfies ToolCallParser);
+
+    // 内置 tool 通过闭包捕获 Engine 实例，与用户 tool 统一走 CompositeToolRuntime
+    const builtinEntries = createBuiltinToolEntries(
+      options.skills,
+      options.profiles,
+      (args) => this.executeCreateSession(args),
+    );
+    this.compositeTools = new CompositeToolRuntime(builtinEntries, options.tools);
   }
 
   get sessionId(): string {
@@ -321,27 +327,14 @@ export class StelloEngineImpl implements StelloEngine {
     return child;
   }
 
-  /** 导出 tool 定义，包含内置 tool（stello_create_session + skill tool），过滤用户同名注册 */
+  /** 导出 tool 定义，包含内置 tool + 用户 tool（内置优先，同名去重） */
   getToolDefinitions(): ToolDefinition[] {
-    const userDefs = this.tools.getToolDefinitions()
-      .filter(d => d.name !== CREATE_SESSION_TOOL_NAME);
-    const profileNames = this.profiles?.listNames();
-    const builtins: ToolDefinition[] = [createSessionToolDefinition(profileNames)];
-    if (this.skills.getAll().length > 0) {
-      builtins.push(createSkillToolDefinition(this.skills));
-    }
-    return [...builtins, ...userDefs];
+    return this.compositeTools.getToolDefinitions();
   }
 
-  /** 执行 tool call，内置 tool 由 engine 直接处理 */
+  /** 执行 tool call，内置 tool 优先，fallback 到用户 tool */
   async executeTool(name: string, args: Record<string, unknown>): Promise<ToolExecutionResult> {
-    if (name === 'activate_skill') {
-      return executeSkillTool(this.skills, args as { name: string });
-    }
-    if (name === CREATE_SESSION_TOOL_NAME) {
-      return this.executeCreateSession(args);
-    }
-    return this.tools.executeTool(name, args);
+    return this.compositeTools.executeTool(name, args);
   }
 
   /** 执行内置 stello_create_session：走 forkSession 完整路径，支持 profile 解析 */

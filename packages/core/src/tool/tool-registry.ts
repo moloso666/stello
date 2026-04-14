@@ -2,7 +2,7 @@ import type { ToolDefinition, ToolExecutionResult, SkillRouter } from '../types/
 import type { EngineToolRuntime } from '../engine/stello-engine'
 import type { ForkProfileRegistry } from '../engine/fork-profile'
 import { createSessionToolDefinition } from '../engine/builtin-tools'
-import { createSkillToolDefinition } from '../skill/skill-tool'
+import { createSkillToolDefinition, executeSkillTool } from '../skill/skill-tool'
 
 /**
  * 注册表条目 — 应用层工具的最小契约
@@ -66,26 +66,87 @@ export class ToolRegistryImpl implements ToolRegistry {
   }
 }
 
-/**
- * 生成完整的 session 兼容工具列表（内置 tool + 用户 tool）
- *
- * Session 创建时需要 tool schema 让 LLM 看到可用工具。
- * 此函数合并 Engine 内置 tool 和用户注册 tool，输出 session 兼容格式。
- */
-export function buildSessionToolList(
-  registry: ToolRegistry,
+/** 创建内置 tool 条目（stello_create_session + activate_skill） */
+export function createBuiltinToolEntries(
   skills: SkillRouter,
   profiles?: ForkProfileRegistry,
-): Array<{ name: string; description: string; inputSchema: Record<string, unknown> }> {
-  const builtinDefs: ToolDefinition[] = [
-    createSessionToolDefinition(profiles?.listNames()),
-  ]
+  executeCreateSession?: (args: Record<string, unknown>) => Promise<ToolExecutionResult>,
+): ToolRegistryEntry[] {
+  const entries: ToolRegistryEntry[] = []
+
+  // stello_create_session
+  const createSessionDef = createSessionToolDefinition(profiles?.listNames())
+  entries.push({
+    name: createSessionDef.name,
+    description: createSessionDef.description,
+    parameters: createSessionDef.parameters,
+    execute: executeCreateSession ?? (async () => ({
+      success: false,
+      error: 'stello_create_session 不可用：未提供 executeCreateSession 实现',
+    })),
+  })
+
+  // activate_skill（仅在有 skills 时注入）
   if (skills.getAll().length > 0) {
-    builtinDefs.push(createSkillToolDefinition(skills))
+    const skillDef = createSkillToolDefinition(skills)
+    entries.push({
+      name: skillDef.name,
+      description: skillDef.description,
+      parameters: skillDef.parameters,
+      execute: async (args) => executeSkillTool(skills, args as { name: string }),
+    })
   }
 
-  const allDefs = [...builtinDefs, ...registry.getToolDefinitions()]
-  return allDefs.map(d => ({
+  return entries
+}
+
+/**
+ * 组合工具运行时 — 合并内置 tool 和用户 tool，内置优先
+ *
+ * 不修改用户的 ToolRegistry，适用于跨 Engine 共享同一 registry 的场景。
+ */
+export class CompositeToolRuntime implements EngineToolRuntime {
+  private readonly builtinMap: Map<string, ToolRegistryEntry>
+  private readonly builtinDefs: ToolDefinition[]
+
+  constructor(
+    private readonly builtinEntries: ToolRegistryEntry[],
+    private readonly userTools: EngineToolRuntime,
+  ) {
+    this.builtinMap = new Map(builtinEntries.map(e => [e.name, e]))
+    this.builtinDefs = builtinEntries.map(e => ({
+      name: e.name,
+      description: e.description,
+      parameters: e.parameters,
+    }))
+  }
+
+  /** 合并 tool 定义，内置优先，用户同名 tool 被过滤 */
+  getToolDefinitions(): ToolDefinition[] {
+    const userDefs = this.userTools.getToolDefinitions()
+      .filter(d => !this.builtinMap.has(d.name))
+    return [...this.builtinDefs, ...userDefs]
+  }
+
+  /** 执行 tool：内置优先，fallback 到用户 tool */
+  async executeTool(name: string, args: Record<string, unknown>): Promise<ToolExecutionResult> {
+    const builtin = this.builtinMap.get(name)
+    if (builtin) {
+      return builtin.execute(args)
+    }
+    return this.userTools.executeTool(name, args)
+  }
+}
+
+/**
+ * 生成完整的 session 兼容工具列表
+ *
+ * 接受 EngineToolRuntime（通常是 CompositeToolRuntime），输出 session 兼容格式。
+ */
+export function buildSessionToolList(
+  runtime: EngineToolRuntime,
+): Array<{ name: string; description: string; inputSchema: Record<string, unknown> }> {
+  return runtime.getToolDefinitions().map(d => ({
     name: d.name,
     description: d.description,
     inputSchema: d.parameters,
