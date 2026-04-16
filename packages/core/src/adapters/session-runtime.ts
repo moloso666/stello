@@ -1,4 +1,4 @@
-import type { ForkContextFn } from '@stello-ai/session';
+import type { ForkContextFn, LLMAdapter, LLMCompleteOptions } from '@stello-ai/session';
 import type { EngineRuntimeSession } from '../engine/stello-engine';
 import type { ToolCallParser } from '../engine/turn-runner';
 
@@ -51,8 +51,8 @@ export interface SessionCompatibleForkOptions {
   systemPrompt?: string;
   context?: 'none' | 'inherit' | ForkContextFn;
   prompt?: string;
-  llm?: unknown;
-  tools?: unknown;
+  llm?: LLMAdapter;
+  tools?: LLMCompleteOptions['tools'];
   tags?: string[];
   metadata?: Record<string, unknown>;
   /** 子 session 的 L3→L2 提炼函数（不传则继承父 session 的） */
