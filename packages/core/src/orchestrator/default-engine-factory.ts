@@ -6,6 +6,7 @@ import {
   StelloEngineImpl,
   type EngineHooks,
   type EngineLifecycleAdapter,
+  type EngineRuntimeSession,
   type EngineToolRuntime,
 } from '../engine/stello-engine';
 import type { TurnRunner } from '../engine/turn-runner';
@@ -32,6 +33,8 @@ export interface DefaultEngineFactoryOptions {
   profiles?: ForkProfileRegistry;
   turnRunner?: TurnRunner;
   hooks?: EngineHookProvider;
+  /** 每 N 轮自动触发 consolidation（0 或不传则禁用） */
+  consolidateEveryNTurns?: number;
 }
 
 /**
@@ -45,7 +48,8 @@ export class DefaultEngineFactory implements EngineFactory {
   async create(sessionId: string): Promise<OrchestratorEngine> {
     const session = await this.options.sessionRuntimeResolver.resolve(sessionId);
     const userHooks = this.resolveHooks(sessionId);
-    const mergedHooks = userHooks;
+    const autoHooks = this.buildAutoConsolidateHook(session);
+    const mergedHooks = this.mergeHooks(userHooks, autoHooks);
     const skills = await this.resolveSkillRouter(sessionId);
 
     return new StelloEngineImpl({
@@ -89,5 +93,46 @@ export class DefaultEngineFactory implements EngineFactory {
     const { hooks } = this.options;
     if (!hooks) return undefined;
     return typeof hooks === 'function' ? hooks(sessionId) : hooks;
+  }
+
+  /** 构建自动 consolidation hook */
+  private buildAutoConsolidateHook(session: EngineRuntimeSession): Partial<EngineHooks> {
+    const n = this.options.consolidateEveryNTurns;
+    if (!n || n <= 0) return {};
+    return {
+      onRoundEnd: () => {
+        const next = session.turnCount + 1;
+        this.options.sessions.updateMeta(session.id, { turnCount: next }).catch(() => {});
+        if (next % n === 0) {
+          session.consolidate().catch(() => {});
+        }
+      },
+    };
+  }
+
+  /** 合并用户 hooks 和自动 hooks，同一 key 下两者都 fire */
+  private mergeHooks(
+    userHooks?: Partial<EngineHooks>,
+    autoHooks?: Partial<EngineHooks>,
+  ): Partial<EngineHooks> | undefined {
+    if (!userHooks && !autoHooks) return undefined;
+    if (!userHooks) return autoHooks;
+    if (!autoHooks || Object.keys(autoHooks).length === 0) return userHooks;
+
+    const merged: Partial<EngineHooks> = { ...userHooks };
+    for (const key of Object.keys(autoHooks) as Array<keyof EngineHooks>) {
+      const userFn = userHooks[key] as ((ctx: unknown) => Promise<void> | void) | undefined;
+      const autoFn = autoHooks[key] as ((ctx: unknown) => Promise<void> | void) | undefined;
+      if (!autoFn) continue;
+      if (!userFn) {
+        (merged as Record<string, unknown>)[key] = autoFn;
+      } else {
+        (merged as Record<string, unknown>)[key] = (ctx: unknown) => {
+          userFn(ctx);
+          autoFn(ctx);
+        };
+      }
+    }
+    return merged;
   }
 }

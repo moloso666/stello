@@ -182,4 +182,97 @@ describe('DefaultEngineFactory', () => {
     expect(skillTool).toBeDefined()
     expect(skillTool!.description).toContain('research')
   })
+
+  const makeSessionWithTurnCount = (id = 's1', initialTurnCount = 0) => ({
+    id,
+    meta: { id, turnCount: initialTurnCount, status: 'active' as const },
+    turnCount: initialTurnCount,
+    send: vi.fn().mockResolvedValue(JSON.stringify({ content: 'done', toolCalls: [] })),
+    consolidate: vi.fn().mockResolvedValue(undefined),
+  });
+
+  it('consolidateEveryNTurns 到达阈值时自动触发 consolidate', async () => {
+    // turnCount 从 1 开始，+1 后为 2，2 % 2 === 0，应触发
+    const runtimeSession = makeSessionWithTurnCount('s1', 1);
+    const opts = baseOptions();
+
+    const factory = new DefaultEngineFactory({
+      ...opts,
+      sessionRuntimeResolver: {
+        resolve: vi.fn().mockResolvedValue(runtimeSession),
+      },
+      consolidateEveryNTurns: 2,
+    });
+
+    const engine = await factory.create('s1');
+    await engine.turn('hello');
+    // fire-and-forget，等 microtasks 完成
+    await Promise.resolve();
+
+    expect(runtimeSession.consolidate).toHaveBeenCalled();
+  });
+
+  it('未达阈值时不触发 consolidate', async () => {
+    // turnCount 从 0 开始，+1 后为 1，1 % 2 !== 0，不触发
+    const runtimeSession = makeSessionWithTurnCount('s1', 0);
+    const opts = baseOptions();
+
+    const factory = new DefaultEngineFactory({
+      ...opts,
+      sessionRuntimeResolver: {
+        resolve: vi.fn().mockResolvedValue(runtimeSession),
+      },
+      consolidateEveryNTurns: 2,
+    });
+
+    const engine = await factory.create('s1');
+    await engine.turn('hello');
+    await Promise.resolve();
+
+    expect(runtimeSession.consolidate).not.toHaveBeenCalled();
+  });
+
+  it('未配置 consolidateEveryNTurns 时无自动 consolidation', async () => {
+    const runtimeSession = makeSessionWithTurnCount('s1', 1);
+    const opts = baseOptions();
+
+    const factory = new DefaultEngineFactory({
+      ...opts,
+      sessionRuntimeResolver: {
+        resolve: vi.fn().mockResolvedValue(runtimeSession),
+      },
+      // 没有 consolidateEveryNTurns
+    });
+
+    const engine = await factory.create('s1');
+    await engine.turn('hello');
+    await Promise.resolve();
+
+    expect(runtimeSession.consolidate).not.toHaveBeenCalled();
+  });
+
+  it('用户 hooks 和自动 consolidation hook 合并后都能触发', async () => {
+    // turnCount 从 1 开始，+1 后为 2，2 % 2 === 0，应触发
+    const runtimeSession = makeSessionWithTurnCount('s1', 1);
+    const opts = baseOptions();
+    const userOnRoundEnd = vi.fn();
+
+    const factory = new DefaultEngineFactory({
+      ...opts,
+      sessionRuntimeResolver: {
+        resolve: vi.fn().mockResolvedValue(runtimeSession),
+      },
+      consolidateEveryNTurns: 2,
+      hooks: {
+        onRoundEnd: userOnRoundEnd,
+      },
+    });
+
+    const engine = await factory.create('s1');
+    await engine.turn('hello');
+    await Promise.resolve();
+
+    expect(userOnRoundEnd).toHaveBeenCalled();
+    expect(runtimeSession.consolidate).toHaveBeenCalled();
+  });
 });
