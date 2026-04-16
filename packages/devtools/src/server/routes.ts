@@ -42,16 +42,9 @@ function withErrorHandler(app: Hono): void {
   })
 }
 
-/** 合法的 consolidation trigger 值 */
-const CONSOLIDATION_TRIGGERS = new Set(['manual', 'everyNTurns', 'onSwitch', 'onArchive', 'onLeave'])
-
-/** 合法的 integration trigger 值 */
-const INTEGRATION_TRIGGERS = new Set(['manual', 'afterConsolidate', 'everyNTurns', 'onSwitch', 'onArchive', 'onLeave'])
-
 /** 序列化 agent 配置为 JSON 快照 */
 function serializeConfig(agent: StelloAgent) {
   const config = agent.config
-  const schedulerConfig = config.orchestration?.scheduler?.getConfig?.()
   const splitGuardConfig = config.orchestration?.splitGuard?.getConfig?.()
 
   const hooksProvider = config.orchestration?.hooks
@@ -65,24 +58,17 @@ function serializeConfig(agent: StelloAgent) {
   return {
     orchestration: {
       strategy: config.orchestration?.strategy?.constructor?.name ?? 'MainSessionFlatStrategy',
-      hasMainSession: !!config.orchestration?.mainSession,
+      consolidateEveryNTurns: config.orchestration?.consolidateEveryNTurns ?? null,
       hasTurnRunner: !!config.orchestration?.turnRunner,
     },
     runtime: {
       idleTtlMs: config.runtime?.recyclePolicy?.idleTtlMs ?? 0,
       hasResolver: !!config.runtime?.resolver,
     },
-    scheduling: {
-      consolidation: schedulerConfig?.consolidation ?? { trigger: 'manual' },
-      integration: schedulerConfig?.integration ?? { trigger: 'manual' },
-      hasScheduler: !!config.orchestration?.scheduler,
-    },
     splitGuard: splitGuardConfig ?? null,
     session: {
       hasSessionResolver: !!config.session?.sessionResolver,
       hasMainSessionResolver: !!config.session?.mainSessionResolver,
-      hasConsolidateFn: !!config.session?.consolidateFn,
-      hasIntegrateFn: !!config.session?.integrateFn,
       hasSerializeSendResult: !!config.session?.serializeSendResult,
       hasToolCallParser: !!config.session?.toolCallParser,
       options: config.session?.options ?? null,
@@ -103,16 +89,11 @@ function serializeConfig(agent: StelloAgent) {
 /** 提取可持久化的热更新配置子集。 */
 function serializeHotConfig(agent: StelloAgent): StelloAgentHotConfig {
   const config = agent.config
-  const schedulerConfig = config.orchestration?.scheduler?.getConfig?.()
   const splitGuardConfig = config.orchestration?.splitGuard?.getConfig?.()
 
   return {
     runtime: {
       idleTtlMs: config.runtime?.recyclePolicy?.idleTtlMs ?? 0,
-    },
-    scheduling: {
-      consolidation: schedulerConfig?.consolidation ?? { trigger: 'manual' },
-      integration: schedulerConfig?.integration ?? { trigger: 'manual' },
     },
     splitGuard: splitGuardConfig ?? undefined,
   }
@@ -243,22 +224,10 @@ export function createRoutes(
   /** 手动触发 consolidation（L3 → L2） */
   app.post('/sessions/:id/consolidate', async (c) => {
     const id = c.req.param('id')
-    const memory = agent.config.memory
-    const consolidateFn = agent.config.session?.consolidateFn
-    if (!consolidateFn) {
-      return c.json({ error: 'No consolidateFn configured' }, 400)
-    }
-    const records = await memory.readRecords(id)
-    if (records.length === 0) {
-      return c.json({ error: 'No records to consolidate' }, 400)
-    }
-    const currentMemory = await memory.readMemory(id).catch(() => null)
-    const messages = records.map((r) => ({ role: r.role, content: r.content, timestamp: r.timestamp }))
     onEvent?.({ type: 'consolidate.start', sessionId: id })
-    const l2 = await consolidateFn(currentMemory, messages)
-    await memory.writeMemory(id, l2)
-    onEvent?.({ type: 'consolidate.done', sessionId: id, data: { l2Length: l2.length } })
-    return c.json({ ok: true, l2 })
+    await agent.consolidateSession(id)
+    onEvent?.({ type: 'consolidate.done', sessionId: id })
+    return c.json({ ok: true })
   })
 
   /** 进入 session */
@@ -406,10 +375,6 @@ export function createRoutes(
   app.patch('/config', async (c) => {
     const body = await c.req.json<{
       runtime?: { idleTtlMs?: number }
-      scheduling?: {
-        consolidation?: { trigger?: string; everyNTurns?: number }
-        integration?: { trigger?: string; everyNTurns?: number }
-      }
       splitGuard?: { minTurns?: number; cooldownTurns?: number }
     }>()
 
@@ -417,18 +382,6 @@ export function createRoutes(
     const errors: string[] = []
     if (body.runtime?.idleTtlMs !== undefined && (typeof body.runtime.idleTtlMs !== 'number' || body.runtime.idleTtlMs < 0)) {
       errors.push('runtime.idleTtlMs must be a non-negative number')
-    }
-    if (body.scheduling?.consolidation?.trigger && !CONSOLIDATION_TRIGGERS.has(body.scheduling.consolidation.trigger)) {
-      errors.push(`scheduling.consolidation.trigger must be one of: ${[...CONSOLIDATION_TRIGGERS].join(', ')}`)
-    }
-    if (body.scheduling?.integration?.trigger && !INTEGRATION_TRIGGERS.has(body.scheduling.integration.trigger)) {
-      errors.push(`scheduling.integration.trigger must be one of: ${[...INTEGRATION_TRIGGERS].join(', ')}`)
-    }
-    if (body.scheduling?.consolidation?.everyNTurns !== undefined && (typeof body.scheduling.consolidation.everyNTurns !== 'number' || body.scheduling.consolidation.everyNTurns < 1)) {
-      errors.push('scheduling.consolidation.everyNTurns must be a positive integer')
-    }
-    if (body.scheduling?.integration?.everyNTurns !== undefined && (typeof body.scheduling.integration.everyNTurns !== 'number' || body.scheduling.integration.everyNTurns < 1)) {
-      errors.push('scheduling.integration.everyNTurns must be a positive integer')
     }
     if (body.splitGuard?.minTurns !== undefined && (typeof body.splitGuard.minTurns !== 'number' || body.splitGuard.minTurns < 0)) {
       errors.push('splitGuard.minTurns must be a non-negative number')
@@ -443,7 +396,6 @@ export function createRoutes(
     /* 构建热更新 patch */
     const patch: StelloAgentHotConfig = {}
     if (body.runtime) patch.runtime = body.runtime
-    if (body.scheduling) patch.scheduling = body.scheduling as StelloAgentHotConfig['scheduling']
     if (body.splitGuard) patch.splitGuard = body.splitGuard
 
     agent.updateConfig(patch)

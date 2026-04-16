@@ -39,6 +39,7 @@ function createMockAgent() {
     leaveSession: vi.fn().mockResolvedValue({ sessionId: 'sess-1' }),
     forkSession: vi.fn().mockResolvedValue({ id: 'child-1', parentId: 'sess-1', label: 'fork', children: [], refs: [], depth: 2, index: 0 }),
     archiveSession: vi.fn().mockResolvedValue(undefined),
+    consolidateSession: vi.fn().mockResolvedValue(undefined),
     updateConfig: vi.fn((patch: { runtime?: { idleTtlMs?: number } }) => {
       if (patch.runtime?.idleTtlMs !== undefined) {
         config.runtime.recyclePolicy.idleTtlMs = patch.runtime.idleTtlMs
@@ -205,19 +206,6 @@ describe('devtools REST routes', () => {
     })
     expect(res.status).toBe(400)
     expect(agent.updateConfig).not.toHaveBeenCalled()
-  })
-
-  it('PATCH /config 校验非法 trigger 值', async () => {
-    const agent = createMockAgent()
-    const app = new Hono()
-    app.route('/api', createRoutes(agent as never))
-
-    const res = await app.request('/api/config', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ scheduling: { consolidation: { trigger: 'invalid' } } }),
-    })
-    expect(res.status).toBe(400)
   })
 
   it('GET /sessions/:id/detail 返回详细数据', async () => {
