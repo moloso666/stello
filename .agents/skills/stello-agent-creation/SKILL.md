@@ -1,6 +1,6 @@
 ---
 name: stello-agent-creation
-description: StelloAgent 创建配置教程。完整说明 createStelloAgent 的每个配置项，包含 tools、skills、forkProfiles、scheduler、session 接入等。
+description: StelloAgent 创建配置教程。完整说明 createStelloAgent 的每个配置项，包含 tools、skills、forkProfiles、consolidation 触发、session 接入等。
 ---
 
 # StelloAgent 创建配置教程
@@ -29,7 +29,6 @@ const agent = createStelloAgent({
   },
   session: {
     sessionResolver: async (id) => loadedSession,
-    consolidateFn: myConsolidateFn,
   },
 })
 ```
@@ -241,22 +240,6 @@ session: {
   // 加载 MainSession（可选，需要 integration 时提供）
   mainSessionResolver: async () => mainSession,
 
-  // L3 → L2 提炼函数（必填，作为根 session 的默认值，fork 时可覆盖）
-  consolidateFn: async (currentMemory, messages) => {
-    return llm.summarize(messages)  // 返回 L2 字符串
-  },
-
-  // 所有 L2 → synthesis + insights（可选，与 mainSessionResolver 配对）
-  integrateFn: async (children, currentSynthesis) => {
-    return {
-      synthesis: '综合认知...',
-      insights: children.map(c => ({
-        sessionId: c.sessionId,
-        content: `针对 ${c.label} 的建议...`,
-      })),
-    }
-  },
-
   // 可选：自定义 send() 结果序列化（默认 JSON）
   serializeSendResult: (result) => JSON.stringify(result),
 
@@ -265,11 +248,13 @@ session: {
 }
 ```
 
+`consolidateFn` 和 `integrateFn` 在 Session 创建时绑定，通过 `sessionResolver` 返回的 Session 实例携带——`session.consolidate()` 和 `mainSession.integrate()` 无参调用，fn 已在构建时注入。
+
 **两种 session 接入方式**：
 
 | 方式 | 配置 | 适用场景 |
 |------|------|---------|
-| Session 适配 | `session.sessionResolver` + `session.consolidateFn` | 使用 `@stello-ai/session` 包 |
+| Session 适配 | `session.sessionResolver` | 使用 `@stello-ai/session` 包 |
 | 直接提供 runtime | `runtime.resolver` | 自定义 session 实现 |
 
 方式一是推荐路径。StelloAgent 内部自动调用 `adaptSessionToEngineRuntime()` 完成适配。
@@ -278,36 +263,17 @@ session: {
 
 ## 3. `orchestration` — 编排策略（可选）
 
-### 3.1 `scheduler` — 调度器
+### 3.1 `consolidateEveryNTurns` — 自动 consolidation
 
-控制 consolidation 和 integration 的自动触发时机。
+每 N 轮对话后自动触发 consolidation（fire-and-forget）。不配置时，consolidation 只能手动触发。
 
 ```typescript
-import { Scheduler } from '@stello-ai/core'
-
-const scheduler = new Scheduler({
-  consolidation: {
-    trigger: 'everyNTurns',  // 每 N 轮自动 consolidate
-    everyNTurns: 3,
-  },
-  integration: {
-    trigger: 'afterConsolidate',  // consolidate 后自动 integrate
-  },
-})
+orchestration: {
+  consolidateEveryNTurns: 5,  // 每 5 轮自动 consolidate
+}
 ```
 
-**可用触发时机**：
-
-| 触发 | consolidation | integration |
-|------|:---:|:---:|
-| `'manual'` | ✓ | ✓ |
-| `'everyNTurns'` | ✓ | ✓ |
-| `'onSwitch'` | ✓ | ✓ |
-| `'onArchive'` | ✓ | ✓ |
-| `'onLeave'` | ✓ | ✓ |
-| `'afterConsolidate'` | - | ✓ |
-
-不配置 scheduler 时，consolidation 和 integration 只能手动触发。
+手动触发：使用 `agent.consolidateSession(sessionId)` 和 `agent.integrate()`。Integration 无框架级自动触发，由应用层在适当时机调用。
 
 ### 3.2 `strategy` — 编排策略
 
@@ -403,13 +369,11 @@ import {
   ToolRegistryImpl,
   SkillRouterImpl,
   ForkProfileRegistryImpl,
-  Scheduler,
   SplitGuard,
   SessionTreeImpl,
   NodeFileSystemAdapter,
   FileSystemMemoryEngine,
   createDefaultConsolidateFn,
-  createDefaultIntegrateFn,
   createOpenAICompatibleAdapter,
   InMemoryStorageAdapter,
   loadSession,
@@ -480,8 +444,6 @@ const agent = createStelloAgent({
       return await loadSession(sessionId, { storage: sessionStorage, llm })
     },
     mainSessionResolver: async () => mainSession,
-    consolidateFn: createDefaultConsolidateFn('请将对话压缩为要点摘要', llmCall), // 默认值，fork 时可覆盖
-    integrateFn: createDefaultIntegrateFn('请综合所有子会话的信息', llmCall),
   },
 
   capabilities: {
@@ -508,10 +470,7 @@ const agent = createStelloAgent({
   },
 
   orchestration: {
-    scheduler: new Scheduler({
-      consolidation: { trigger: 'everyNTurns', everyNTurns: 5 },
-      integration: { trigger: 'afterConsolidate' },
-    }),
+    consolidateEveryNTurns: 5,
     splitGuard: new SplitGuard(sessions, { minTurns: 3, cooldownTurns: 5 }),
     hooks: {
       onSessionFork({ parentId, child }) {
@@ -529,16 +488,6 @@ console.log(result.turn.finalContent)
 
 ---
 
-## 6. StelloAgent 公开方法
+## 6. 运行时使用
 
-| 方法 | 说明 |
-|------|------|
-| `enterSession(id)` | 进入 session，触发 bootstrap |
-| `turn(id, input, options?)` | 运行一轮对话（含 tool call 循环） |
-| `stream(id, input, options?)` | 流式运行一轮对话 |
-| `leaveSession(id)` | 离开 session，触发调度 |
-| `forkSession(id, options)` | 编程式 fork（公开 API，等价于 LLM 调用 stello_create_session） |
-| `archiveSession(id)` | 归档 session |
-| `attachSession(id, holderId)` | 附着 runtime（WS 连接建立时） |
-| `detachSession(id, holderId)` | 释放 runtime（WS 断开时） |
-| `updateConfig(patch)` | 热更新运行时配置 |
+Agent 创建后的运行时操作（turn / stream / fork / attach / detach / 热更新等）见 skill `stello-agent-usage`。

@@ -11,7 +11,7 @@ description: Session / MainSession 对话单元的设计理念、上下文组装
 |--|----------------------|-------------------------|
 | 上下文 | system prompt + insight + L3 + msg | system prompt + synthesis + L3 + msg |
 | 记忆 | `memory()` = L2（技能描述，给 Main 看） | `synthesis()` = integration 产出 |
-| 提炼 | `consolidate(fn)` L3→L2 | `integrate(fn)` 所有 L2→synthesis+insights |
+| 提炼 | `consolidate()` L3→L2 | `integrate()` 所有 L2→synthesis+insights |
 | insights | 被动接收（消费后清除） | 通过 integrate 主动推送 |
 | fork | `fork()` 创建子 Session | 无 — 子 Session 由编排层创建 |
 
@@ -35,7 +35,7 @@ description: Session / MainSession 对话单元的设计理念、上下文组装
 
 这是 Session 间唯一的信息通道：
 
-1. **Integration 生成 insights**：MainSession.integrate(fn) 收集所有子 L2 → IntegrateFn 生成 synthesis + per-child insights
+1. **Integration 生成 insights**：MainSession.integrate() 收集所有子 L2 → IntegrateFn（创建时绑定）生成 synthesis + per-child insights
 2. **定向推送**：每个 insight 通过 `putInsight(sessionId, content)` 写入目标子 Session
 3. **消费即清除**：子 Session 下次 send() 时读取 insight，注入上下文，然后清除
 4. **替换策略**：每次 integration 覆盖上一次的 insight（不追加）
