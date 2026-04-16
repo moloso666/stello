@@ -83,18 +83,6 @@ export type {
   TurnRunnerOptions,
   TurnRunnerResult,
 } from './engine/turn-runner';
-export { Scheduler } from './engine/scheduler';
-export type {
-  ConsolidationTrigger,
-  IntegrationTrigger,
-  SchedulerSession,
-  SchedulerMainSession,
-  ConsolidationPolicy,
-  IntegrationPolicy,
-  SchedulerConfig,
-  SchedulerResult,
-  SchedulerContext,
-} from './engine/scheduler';
 export { StelloEngineImpl } from './engine/stello-engine';
 export type {
   EngineRuntimeSession,
@@ -111,7 +99,6 @@ export type {
   OrchestratorEngine,
   EngineFactory,
   OrchestrationStrategy,
-  OrchestratorSchedulingOptions,
 } from './orchestrator/session-orchestrator';
 export { MainSessionFlatStrategy } from './orchestrator/session-orchestrator';
 export { HierarchicalOkrStrategy } from './orchestrator/session-orchestrator';

@@ -32,7 +32,6 @@ import type { MemoryEngine } from '../types/memory';
 import type { ConfirmProtocol, SkillRouter } from '../types/lifecycle';
 import type { EngineLifecycleAdapter, EngineToolRuntime } from '../engine/stello-engine';
 import type { ForkProfileRegistry } from '../engine/fork-profile';
-import type { Scheduler, SchedulerConfig, SchedulerMainSession } from '../engine/scheduler';
 import type { SplitGuard } from '../session/split-guard';
 
 /** Session 能力相关配置 */
@@ -76,9 +75,7 @@ export interface StelloAgentRuntimeConfig {
 export interface StelloAgentOrchestrationConfig {
   strategy?: OrchestrationStrategy;
   splitGuard?: SplitGuard;
-  mainSession?: SchedulerMainSession | null;
   turnRunner?: TurnRunner;
-  scheduler?: Scheduler;
   hooks?: EngineHookProvider;
 }
 
@@ -121,24 +118,6 @@ function resolveRuntimeResolver(config: StelloAgentConfig): SessionRuntimeResolv
   throw new Error(
     'StelloAgentConfig 缺少 runtime.resolver；若使用 session 配置接入，请提供 session.sessionResolver',
   );
-}
-
-function resolveMainSession(config: StelloAgentConfig): SchedulerMainSession | null | undefined {
-  if (config.orchestration?.mainSession) {
-    return config.orchestration.mainSession;
-  }
-
-  if (config.session?.mainSessionResolver) {
-    return {
-      async integrate(): Promise<void> {
-        const mainSession = await config.session!.mainSessionResolver!();
-        if (!mainSession) return;
-        await mainSession.integrate();
-      },
-    };
-  }
-
-  return null;
 }
 
 function resolveTurnRunner(config: StelloAgentConfig): TurnRunner | undefined {
@@ -191,24 +170,17 @@ export class StelloAgent {
       sessionRuntimeResolver: resolveRuntimeResolver(config),
       profiles: config.capabilities.profiles,
       splitGuard: config.orchestration?.splitGuard,
-      mainSession: resolveMainSession(config),
       turnRunner: resolveTurnRunner(config),
-      scheduler: config.orchestration?.scheduler,
       hooks: config.orchestration?.hooks,
     });
     this.runtimeManager = new DefaultEngineRuntimeManager(
       engineFactory,
       config.runtime?.recyclePolicy,
     );
-    const scheduler = config.orchestration?.scheduler;
-    const scheduling = scheduler
-      ? { scheduler, mainSession: resolveMainSession(config) }
-      : undefined;
     this.orchestrator = new SessionOrchestrator(
       config.sessions,
       this.runtimeManager,
       config.orchestration?.strategy ?? new MainSessionFlatStrategy(),
-      scheduling,
     );
   }
 
@@ -278,9 +250,6 @@ export class StelloAgent {
     if (patch.runtime && 'updateRecyclePolicy' in this.runtimeManager) {
       (this.runtimeManager as DefaultEngineRuntimeManager).updateRecyclePolicy(patch.runtime);
     }
-    if (patch.scheduling) {
-      this.config.orchestration?.scheduler?.updateConfig?.(patch.scheduling);
-    }
     if (patch.splitGuard) {
       this.config.orchestration?.splitGuard?.updateConfig?.(patch.splitGuard);
     }
@@ -295,7 +264,6 @@ export class StelloAgent {
  */
 export interface StelloAgentHotConfig {
   runtime?: Partial<RuntimeRecyclePolicy>;
-  scheduling?: Partial<SchedulerConfig>;
   splitGuard?: Partial<{ minTurns: number; cooldownTurns: number }>;
 }
 

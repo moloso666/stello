@@ -13,7 +13,6 @@ import type { TopologyNode } from '../types/session';
 import type { SplitGuard } from '../session/split-guard';
 import { resolveSystemPrompt, type ForkProfile, type ForkProfileRegistry } from './fork-profile';
 import { createBuiltinToolEntries, CompositeToolRuntime } from '../tool/tool-registry';
-import type { SchedulerSession } from './scheduler';
 import type { SessionCompatibleForkOptions } from '../adapters/session-runtime';
 import {
   TurnRunner,
@@ -26,19 +25,25 @@ import {
 } from './turn-runner';
 
 /** 供 Engine 使用的运行时 Session 契约 */
-export interface EngineRuntimeSession extends SchedulerSession {
+export interface EngineRuntimeSession {
+  /** 供日志和 hooks 使用的稳定标识 */
+  id: string;
   /** Engine 侧可见的元信息，用于做调度和当前状态检查 */
   meta: {
     id: string;
     turnCount: number;
     status: 'active' | 'archived';
   };
+  /** 当前已完成轮次 */
+  turnCount: number;
   /** 运行一次单条对话 */
   send(input: string): Promise<string>;
   /** 可选：流式运行一次单条对话 */
   stream?(input: string): AsyncIterable<string> & { result: Promise<string> };
   /** fork 子 session，返回子 session 的 runtime */
   fork?(options: SessionCompatibleForkOptions): Promise<EngineRuntimeSession>;
+  /** 由 Session 自己完成 L2/L3 -> memory 的整理 */
+  consolidate(): Promise<void>;
 }
 
 /** Engine 依赖的生命周期适配器 */
@@ -165,11 +170,6 @@ export class StelloEngineImpl implements StelloEngine {
 
   get sessionId(): string {
     return this.session.id;
-  }
-
-  /** 暴露 Scheduler 契约，供 Orchestrator 做跨 session 调度 */
-  get schedulerSession(): SchedulerSession {
-    return this.session;
   }
 
   /** 处理一轮编排：当前 session send + tool loop + 调度 */

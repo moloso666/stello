@@ -3,7 +3,6 @@ import type { SessionTree } from '../../types/session';
 import type { MemoryEngine } from '../../types/memory';
 import type { ConfirmProtocol, SkillRouter } from '../../types/lifecycle';
 import { DefaultEngineFactory } from '../default-engine-factory';
-import type { Scheduler } from '../../engine/scheduler';
 
 describe('DefaultEngineFactory', () => {
   const baseOptions = () => ({
@@ -77,110 +76,6 @@ describe('DefaultEngineFactory', () => {
     await engine.enterSession();
 
     expect(onSessionEnter).toHaveBeenCalledWith({ sessionId: 's-special' });
-  });
-
-  it('有 scheduler 时，onRoundEnd hook 会 fire-and-forget 触发 scheduler.afterTurn', async () => {
-    const runtimeSession = makeSession();
-    const scheduler = {
-      afterTurn: vi.fn().mockResolvedValue({
-        consolidated: false,
-        integrated: false,
-        errors: [],
-      }),
-    } as unknown as Scheduler;
-
-    const factory = new DefaultEngineFactory({
-      ...baseOptions(),
-      sessionRuntimeResolver: {
-        resolve: vi.fn().mockResolvedValue(runtimeSession),
-      },
-      scheduler,
-    });
-
-    const engine = await factory.create('s1');
-    await engine.turn('hello');
-
-    // fire-and-forget，等一个 tick 让 promise 执行
-    await Promise.resolve();
-    expect(scheduler.afterTurn).toHaveBeenCalledTimes(1);
-  });
-
-  it('有 scheduler 时，onSessionLeave hook 会 fire-and-forget 触发 scheduler.onSessionLeave', async () => {
-    const runtimeSession = makeSession();
-    const scheduler = {
-      onSessionLeave: vi.fn().mockResolvedValue({
-        consolidated: true,
-        integrated: false,
-        errors: [],
-      }),
-    } as unknown as Scheduler;
-
-    const factory = new DefaultEngineFactory({
-      ...baseOptions(),
-      sessionRuntimeResolver: {
-        resolve: vi.fn().mockResolvedValue(runtimeSession),
-      },
-      scheduler,
-    });
-
-    const engine = await factory.create('s1');
-    await engine.leaveSession();
-
-    await Promise.resolve();
-    expect(scheduler.onSessionLeave).toHaveBeenCalledTimes(1);
-  });
-
-  it('有 scheduler 时，onSessionArchive hook 会 fire-and-forget 触发 scheduler.onSessionArchive', async () => {
-    const runtimeSession = makeSession();
-    const scheduler = {
-      onSessionArchive: vi.fn().mockResolvedValue({
-        consolidated: false,
-        integrated: false,
-        errors: [],
-      }),
-    } as unknown as Scheduler;
-
-    const factory = new DefaultEngineFactory({
-      ...baseOptions(),
-      sessionRuntimeResolver: {
-        resolve: vi.fn().mockResolvedValue(runtimeSession),
-      },
-      scheduler,
-    });
-
-    const engine = await factory.create('s1');
-    await engine.archiveSession();
-
-    await Promise.resolve();
-    expect(scheduler.onSessionArchive).toHaveBeenCalledTimes(1);
-  });
-
-  it('用户 hooks 和 scheduler hooks 合并后都能触发', async () => {
-    const runtimeSession = makeSession();
-    const userOnRoundEnd = vi.fn();
-    const scheduler = {
-      afterTurn: vi.fn().mockResolvedValue({
-        consolidated: false,
-        integrated: false,
-        errors: [],
-      }),
-    } as unknown as Scheduler;
-
-    const factory = new DefaultEngineFactory({
-      ...baseOptions(),
-      sessionRuntimeResolver: {
-        resolve: vi.fn().mockResolvedValue(runtimeSession),
-      },
-      scheduler,
-      hooks: { onRoundEnd: userOnRoundEnd },
-    });
-
-    const engine = await factory.create('s1');
-    await engine.turn('hello');
-
-    await Promise.resolve();
-    expect(userOnRoundEnd).toHaveBeenCalledTimes(1);
-    expect(scheduler.afterTurn).toHaveBeenCalledTimes(1);
   });
 
   it('session metadata 有 _stello.allowedSkills 时，engine 使用过滤后的 skills', async () => {
