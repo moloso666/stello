@@ -31,7 +31,7 @@ function print(label: string, value: unknown): void {
  * 这里用一个非常轻量的 session 兼容对象模拟 @stello-ai/session。
  * 真正接入时，把这里替换成真实 Session 实例即可。
  */
-function createMockSession(id: string) {
+function createMockSession(id: string, consolidateFn?: (currentMemory: string | null, messages: Array<{ role: string; content: string; timestamp?: string }>) => Promise<string>) {
   const records: Array<{ role: string; content: string; timestamp?: string }> = []
   let memory: string | null = null
 
@@ -62,13 +62,9 @@ function createMockSession(id: string) {
     async messages() {
       return records
     },
-    async consolidate(
-      fn: (
-        currentMemory: string | null,
-        messages: Array<{ role: string; content: string; timestamp?: string }>,
-      ) => Promise<string>,
-    ) {
-      memory = await fn(memory, records)
+    async consolidate() {
+      if (!consolidateFn) throw new Error('No consolidateFn configured')
+      memory = await consolidateFn(memory, records)
     },
   }
 }
@@ -142,8 +138,11 @@ async function main(): Promise<void> {
 
   section('Prepare Agent Config')
 
+  const demoConsolidateFn = async (_currentMemory: string | null, messages: Array<{ role: string; content: string; timestamp?: string }>) => {
+    return `summary(${messages.length})`
+  }
   const mockSessions = new Map<string, ReturnType<typeof createMockSession>>()
-  mockSessions.set(root.id, createMockSession(root.id))
+  mockSessions.set(root.id, createMockSession(root.id, demoConsolidateFn))
 
   const lifecycle: EngineLifecycleAdapter = {
     bootstrap: async () => ({
@@ -158,7 +157,7 @@ async function main(): Promise<void> {
     }),
     prepareChildSpawn: async (options) => {
       const child = await (sessions as SessionTreeImpl).createChild(options)
-      mockSessions.set(child.id, createMockSession(child.id))
+      mockSessions.set(child.id, createMockSession(child.id, demoConsolidateFn))
       return child
     },
   }
@@ -203,9 +202,6 @@ async function main(): Promise<void> {
         }
         return session
       },
-      consolidateFn: async (_currentMemory, messages) => {
-        return `summary(${messages.length})`
-      },
     },
     capabilities: {
       lifecycle,
@@ -224,7 +220,6 @@ async function main(): Promise<void> {
     hasSessions: Boolean(config.sessions),
     hasMemory: Boolean(config.memory),
     hasSessionResolver: Boolean(config.session?.sessionResolver),
-    hasConsolidateFn: Boolean(config.session?.consolidateFn),
     hasLifecycle: Boolean(config.capabilities.lifecycle),
     hasTools: Boolean(config.capabilities.tools),
     recyclePolicy: config.runtime?.recyclePolicy ?? null,

@@ -103,11 +103,10 @@ async function run() {
   // ─── Step 0: 检查服务可用 ───
   section('Step 0: 服务健康检查')
   const config = await get<{
-    scheduling?: { hasScheduler?: boolean }
+    orchestration?: { consolidateEveryNTurns?: number | null }
     splitGuard?: unknown
   }>('/config')
   assert(!!config, 'GET /config 响应正常')
-  assert(config.scheduling?.hasScheduler === true, 'Scheduler 已启用')
   assert(config.splitGuard !== null, 'SplitGuard 已启用')
 
   const llm = await get<{ configured: boolean; model: string }>('/llm')

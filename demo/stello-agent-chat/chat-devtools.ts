@@ -11,7 +11,6 @@ import {
   buildSessionToolList,
   createBuiltinToolEntries,
   CompositeToolRuntime,
-  Scheduler,
   createStelloAgent,
   type ConfirmProtocol,
   type CoreSchema,
@@ -40,6 +39,7 @@ import { InMemoryStorageAdapter } from '../../packages/session/src/mocks/in-memo
 import type { MainSession } from '../../packages/session/src/types/main-session-api.ts'
 import type { Session } from '../../packages/session/src/types/session-api.ts'
 import type { SessionMeta as SessionComponentMeta } from '../../packages/session/src/types/session.ts'
+import type { ConsolidateFn, IntegrateFn } from '../../packages/session/src/types/functions.ts'
 
 const dataDir = './tmp/stello-agent-chat'
 const dataDirAbs = resolve(process.cwd(), dataDir)
@@ -224,6 +224,7 @@ async function registerStandardSession(
   systemPrompt: string,
   llm: ReturnType<typeof createOpenAICompatibleAdapter>,
   tools: DemoToolDef,
+  consolidateFn?: ConsolidateFn,
 ): Promise<Session> {
   const now = new Date().toISOString()
   const meta: SessionComponentMeta = {
@@ -239,7 +240,7 @@ async function registerStandardSession(
   const effectiveSystemPrompt = (await readPersistedSystemPrompt(fs, sessionId)) ?? systemPrompt
   await storage.putSession(meta)
   await storage.putSystemPrompt(sessionId, effectiveSystemPrompt)
-  const session = await loadSession(sessionId, { storage, llm, tools: [...tools] })
+  const session = await loadSession(sessionId, { storage, llm, tools: [...tools], consolidateFn })
   if (!session) throw new Error(`Failed to load standard session: ${sessionId}`)
   return session
 }
@@ -253,6 +254,7 @@ async function registerMainSession(
   systemPrompt: string,
   llm: ReturnType<typeof createOpenAICompatibleAdapter>,
   tools: DemoToolDef,
+  integrateFn?: IntegrateFn,
 ): Promise<MainSession> {
   const now = new Date().toISOString()
   const meta: SessionComponentMeta = {
@@ -268,7 +270,7 @@ async function registerMainSession(
   const effectiveSystemPrompt = (await readPersistedSystemPrompt(fs, sessionId)) ?? systemPrompt
   await storage.putSession(meta)
   await storage.putSystemPrompt(sessionId, effectiveSystemPrompt)
-  const session = await loadMainSession(sessionId, { storage, llm, tools: [...tools] })
+  const session = await loadMainSession(sessionId, { storage, llm, tools: [...tools], integrateFn })
   if (!session) throw new Error(`Failed to load main session: ${sessionId}`)
   return session
 }
@@ -574,6 +576,16 @@ export async function bootstrap() {
     rootLabel = root.label
   }
 
+  // consolidateFn / integrateFn 闭包：动态读取当前 prompt
+  const consolidateFn: ConsolidateFn = (currentMemory, messages) => {
+    const fn = createDefaultConsolidateFn(currentConsolidatePrompt, llmCall)
+    return fn(currentMemory, messages)
+  }
+  const integrateFn: IntegrateFn = (children, currentSynthesis) => {
+    const fn = createDefaultIntegrateFn(currentIntegratePrompt, llmCall)
+    return fn(children, currentSynthesis)
+  }
+
   const mainSession = await registerMainSession(
     fs,
     sessionStorage,
@@ -582,6 +594,7 @@ export async function bootstrap() {
     MAIN_SYSTEM_PROMPT,
     currentLlm,
     sessionTools,
+    integrateFn,
   )
   await hydrateRuntimeState(sessionStorage, memory, rootId)
   sessionMap.set(rootId, { main: mainSession })
@@ -598,6 +611,7 @@ export async function bootstrap() {
       makeRegionPrompt(meta.scope ?? meta.label, meta.label),
       currentLlm,
       sessionTools,
+      consolidateFn,
     )
     await hydrateRuntimeState(sessionStorage, memory, meta.id)
     sessionMap.set(meta.id, { session: childSession })
@@ -641,13 +655,6 @@ export async function bootstrap() {
     },
   }
 
-  // ─── Scheduler ───
-
-  const scheduler = new Scheduler({
-    consolidation: { trigger: 'everyNTurns', everyNTurns: 3 },
-    integration: { trigger: 'afterConsolidate' },
-  })
-
   // ─── Agent Config ───
 
   // agent 在 confirm 之后创建，用延迟引用
@@ -683,14 +690,15 @@ export async function bootstrap() {
           storage: sessionStorage,
           llm: currentLlm,
           tools: [...sessionTools],
+          consolidateFn,
         })
         if (!session) throw new Error(`Session not found: ${sessionId}`)
         sessionMap.set(sessionId, { session })
         return wrapStandardSession(sessionId, session, memory, sessionMap)
       },
       mainSessionResolver: async () => ({
-        async integrate(fn: Parameters<typeof mainSession.integrate>[0]) {
-          const result = await mainSession.integrate(fn)
+        async integrate() {
+          const result = await mainSession.integrate()
           /* 同步 synthesis + insights 到文件持久化层 */
           if (result) {
             await memory.writeMemory(rootId, result.synthesis)
@@ -701,14 +709,6 @@ export async function bootstrap() {
           return result
         },
       }),
-      consolidateFn: (currentMemory, messages) => {
-        const fn = createDefaultConsolidateFn(currentConsolidatePrompt, llmCall)
-        return fn(currentMemory, messages)
-      },
-      integrateFn: (children, currentSynthesis) => {
-        const fn = createDefaultIntegrateFn(currentIntegratePrompt, llmCall)
-        return fn(children, currentSynthesis)
-      },
     },
     capabilities: {
       lifecycle,
@@ -718,7 +718,7 @@ export async function bootstrap() {
       profiles: forkProfiles,
     },
     orchestration: {
-      scheduler,
+      consolidateEveryNTurns: 3,
       hooks: {
         onRoundStart({ sessionId }) { currentToolSessionId = sessionId },
         onRoundEnd({ sessionId, input, turn }) {
@@ -823,7 +823,7 @@ export async function bootstrap() {
       async trigger() {
         const resolvedMain = await config.session!.mainSessionResolver?.()
         if (!resolvedMain) throw new Error('MainSession is not configured')
-        const result = await resolvedMain.integrate(config.session!.integrateFn!) as {
+        const result = await resolvedMain.integrate() as {
           synthesis: string
           insights: Array<{ sessionId: string; content: string }>
         }
