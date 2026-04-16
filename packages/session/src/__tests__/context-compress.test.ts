@@ -309,15 +309,13 @@ describe('consolidate 与 compress 独立', () => {
     }
 
     // 不提供 compressFn — 即使有 L2 也不应用于压缩
-    const { session } = await makeSession({ llm })
+    const { session } = await makeSession({ llm, consolidateFn: async (_mem, msgs) => `Summary: ${msgs.length} messages` })
 
     await session.send('msg1')
     await session.send('msg2')
 
     // consolidate 生成 L2
-    await session.consolidate(async (_mem, msgs) =>
-      `Summary: ${msgs.length} messages`
-    )
+    await session.consolidate()
 
     const l2 = await session.memory()
     expect(l2).toBe('Summary: 4 messages')

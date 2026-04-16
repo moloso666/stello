@@ -3,7 +3,7 @@ import type { Session, MessageQueryOptions } from './types/session-api.js'
 import { SessionArchivedError } from './types/session-api.js'
 import type { SessionMeta, SessionMetaUpdate, ForkOptions } from './types/session.js'
 import type { Message } from './types/llm.js'
-import type { ConsolidateFn, CreateSessionOptions, LoadSessionOptions, SendResult, StreamResult } from './types/functions.js'
+import type { CreateSessionOptions, LoadSessionOptions, SendResult, StreamResult } from './types/functions.js'
 import { assembleSessionContext, createBuiltinCompressFn, type CompressionCache } from './context-utils.js'
 
 /** 裁掉尾部不完整的 tool call 组（assistant 有 toolCalls 但缺少对应 tool 结果） */
@@ -377,13 +377,16 @@ function buildSession(
       return storage.getMemory(currentMeta.id)
     },
 
-    async consolidate(fn: ConsolidateFn): Promise<void> {
+    async consolidate(): Promise<void> {
       if (currentMeta.status === 'archived') {
         throw new SessionArchivedError(currentMeta.id)
       }
+      if (!options.consolidateFn) {
+        throw new Error('No consolidateFn configured for this session')
+      }
       const currentMemory = await storage.getMemory(currentMeta.id)
       const messages = await storage.listRecords(currentMeta.id)
-      const newMemory = await fn(currentMemory, messages)
+      const newMemory = await options.consolidateFn(currentMemory, messages)
       await storage.putMemory(currentMeta.id, newMemory)
     },
 
@@ -441,11 +444,13 @@ function buildSession(
         })
       }
 
-      // 构建子 Session 选项（支持 llm/tools 覆盖）
+      // 构建子 Session 选项（支持 llm/tools/consolidateFn/compressFn 覆盖）
       const childOptions = {
         ...options,
         ...(forkOptions.llm && { llm: forkOptions.llm }),
         ...(forkOptions.tools && { tools: forkOptions.tools }),
+        ...(forkOptions.consolidateFn && { consolidateFn: forkOptions.consolidateFn }),
+        ...(forkOptions.compressFn && { compressFn: forkOptions.compressFn }),
       }
       return buildSession(childMeta, childOptions)
     },

@@ -1,6 +1,6 @@
 import type { SessionMeta, SessionMetaUpdate, ForkOptions } from './session.js'
 import type { Message, LLMAdapter } from './llm.js'
-import type { ConsolidateFn, SendResult, StreamResult } from './functions.js'
+import type { SendResult, StreamResult } from './functions.js'
 
 
 /** 消息查询选项 */
@@ -58,8 +58,8 @@ export interface Session {
   /** 读取 L2（技能描述），初始为 null */
   memory(): Promise<string | null>
 
-  /** L3 → L2 提炼，由上层在合适时机触发 */
-  consolidate(fn: ConsolidateFn): Promise<void>
+  /** L3 → L2 提炼，由上层在合适时机触发；consolidateFn 在创建时绑定 */
+  consolidate(): Promise<void>
 
   /** 裁剪旧 L3，保留最近 keepRecent 条。通常在 consolidate() 后调用 */
   trimRecords(keepRecent: number): Promise<void>

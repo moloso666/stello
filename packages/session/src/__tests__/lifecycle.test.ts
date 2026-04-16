@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { makeSession, createMockLLM } from './helpers.js'
+import type { ConsolidateFn } from '../types/functions.js'
 
 describe('updateMeta() + archive() + fork()', () => {
   describe('updateMeta()', () => {
@@ -207,6 +208,25 @@ describe('updateMeta() + archive() + fork()', () => {
       expect(childMessages[1]!.content).toBe('reply')
       expect(childMessages[2]!.role).toBe('assistant')
       expect(childMessages[2]!.content).toBe('继续')
+    })
+  })
+
+  describe('fork() consolidateFn 继承', () => {
+    it('fork 不传 consolidateFn — 子继承父的 consolidateFn', async () => {
+      const parentFn: ConsolidateFn = async () => 'from parent'
+      const { session } = await makeSession({ consolidateFn: parentFn })
+      const child = await session.fork({ label: 'Child' })
+      await child.consolidate()
+      expect(await child.memory()).toBe('from parent')
+    })
+
+    it('fork 传新 consolidateFn — 子使用覆盖的 consolidateFn', async () => {
+      const parentFn: ConsolidateFn = async () => 'from parent'
+      const childFn: ConsolidateFn = async () => 'from child'
+      const { session } = await makeSession({ consolidateFn: parentFn })
+      const child = await session.fork({ label: 'Child', consolidateFn: childFn })
+      await child.consolidate()
+      expect(await child.memory()).toBe('from child')
     })
   })
 

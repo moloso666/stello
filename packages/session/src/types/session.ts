@@ -26,6 +26,7 @@ export interface SessionFilter {
 }
 
 import type { Message, LLMAdapter, LLMCompleteOptions } from './llm.js'
+import type { ConsolidateFn, CompressFn } from './functions.js'
 
 /** fork 时的上下文转换函数：接收父 Session 的 L3 记录，返回写入子 Session 的记录 */
 export type ForkContextFn = (parentRecords: Message[]) => Message[] | Promise<Message[]>
@@ -47,4 +48,8 @@ export interface ForkOptions {
   tools?: LLMCompleteOptions['tools']
   tags?: string[]
   metadata?: Record<string, unknown>
+  /** 覆盖子 Session 的 consolidateFn（不提供则继承父 Session 的） */
+  consolidateFn?: ConsolidateFn
+  /** 覆盖子 Session 的 compressFn（不提供则继承父 Session 的） */
+  compressFn?: CompressFn
 }

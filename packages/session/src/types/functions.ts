@@ -48,6 +48,8 @@ export interface CreateSessionOptions {
   tools?: LLMCompleteOptions['tools']
   /** 上下文压缩函数（超阈值时调用） */
   compressFn?: CompressFn
+  /** L3 → L2 提炼函数，创建时绑定，供 consolidate() 调用 */
+  consolidateFn?: ConsolidateFn
 
 }
 
@@ -63,6 +65,8 @@ export interface LoadSessionOptions {
   tools?: LLMCompleteOptions['tools']
   /** 上下文压缩函数（超阈值时调用） */
   compressFn?: CompressFn
+  /** L3 → L2 提炼函数，加载时绑定，供 consolidate() 调用 */
+  consolidateFn?: ConsolidateFn
 
 }
 
