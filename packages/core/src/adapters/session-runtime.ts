@@ -1,5 +1,4 @@
 import type { ForkContextFn } from '@stello-ai/session';
-import type { SchedulerMainSession } from '../engine/scheduler';
 import type { EngineRuntimeSession } from '../engine/stello-engine';
 import type { ToolCallParser } from '../engine/turn-runner';
 
@@ -73,30 +72,22 @@ export interface SessionCompatible {
     content: string
   ): AsyncIterable<string> & { result: Promise<SessionCompatibleSendResult> };
   messages(): Promise<Array<{ role: string; content: string; timestamp?: string }>>;
-  consolidate(fn: SessionCompatibleConsolidateFn): Promise<void>;
+  consolidate(): Promise<void>;
   /** fork 子 session，返回结构兼容的子 session */
   fork?(options: SessionCompatibleForkOptions): Promise<SessionCompatible>;
 }
 
 /** 结构兼容 @stello-ai/session 的 MainSession */
 export interface MainSessionCompatible {
-  integrate(fn: SessionCompatibleIntegrateFn): Promise<unknown>;
+  integrate(): Promise<unknown>;
 }
 
 /** Session -> EngineRuntime 适配配置 */
 export interface SessionRuntimeAdapterOptions {
-  /** 把 session 的 L3 收敛成 L2 的函数 */
-  consolidateFn: SessionCompatibleConsolidateFn;
   /** 上下文压缩函数（可选） */
   compressFn?: SessionCompatibleCompressFn;
   /** 自定义 send() 结果序列化方式，默认转成 JSON 字符串 */
   serializeResult?: (result: SessionCompatibleSendResult) => string;
-}
-
-/** MainSession -> SchedulerMainSession 适配配置 */
-export interface MainSessionAdapterOptions {
-  /** 执行全局 integrate 的函数 */
-  integrateFn: SessionCompatibleIntegrateFn;
 }
 
 /** 默认的 Session send() 结果序列化 */
@@ -191,33 +182,16 @@ export async function adaptSessionToEngineRuntime(
         }
       : {}),
     async consolidate(): Promise<void> {
-      await session.consolidate(options.consolidateFn);
+      await session.consolidate();
     },
     ...(session.fork
       ? {
           async fork(forkOptions: SessionCompatibleForkOptions): Promise<EngineRuntimeSession> {
             const child = await session.fork!(forkOptions);
-            // fork 时覆盖 consolidateFn/compressFn，未指定则继承父的
-            const childOptions: SessionRuntimeAdapterOptions = {
-              ...options,
-              ...(forkOptions.consolidateFn ? { consolidateFn: forkOptions.consolidateFn } : {}),
-              ...(forkOptions.compressFn ? { compressFn: forkOptions.compressFn } : {}),
-            };
-            return adaptSessionToEngineRuntime(child, childOptions);
+            return adaptSessionToEngineRuntime(child, options);
           },
         }
       : {}),
   };
 }
 
-/** 把真实 MainSession 适配成 core 的 SchedulerMainSession */
-export function adaptMainSessionToSchedulerMainSession(
-  mainSession: MainSessionCompatible,
-  options: MainSessionAdapterOptions,
-): SchedulerMainSession {
-  return {
-    async integrate(): Promise<void> {
-      await mainSession.integrate(options.integrateFn);
-    },
-  };
-}

@@ -1,6 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
-  adaptMainSessionToSchedulerMainSession,
   adaptSessionToEngineRuntime,
   serializeSessionSendResult,
   sessionSendResultParser,
@@ -43,10 +42,7 @@ describe('session-runtime adapters', () => {
       consolidate: vi.fn().mockResolvedValue(undefined),
     };
 
-    const consolidateFn = vi.fn().mockResolvedValue('memory');
-    const runtime = await adaptSessionToEngineRuntime(session as never, {
-      consolidateFn,
-    });
+    const runtime = await adaptSessionToEngineRuntime(session as never, {});
 
     expect(runtime.meta.turnCount).toBe(2);
 
@@ -62,7 +58,7 @@ describe('session-runtime adapters', () => {
     });
 
     await runtime.consolidate();
-    expect(session.consolidate).toHaveBeenCalledWith(consolidateFn);
+    expect(session.consolidate).toHaveBeenCalledWith();
   });
 
   it('adapter 暴露 fork 方法并适配返回值', async () => {
@@ -80,9 +76,7 @@ describe('session-runtime adapters', () => {
       fork: vi.fn().mockResolvedValue(childSession),
     };
 
-    const runtime = await adaptSessionToEngineRuntime(parentSession, {
-      consolidateFn: vi.fn(),
-    });
+    const runtime = await adaptSessionToEngineRuntime(parentSession, {});
 
     expect(runtime.fork).toBeDefined();
     const child = await runtime.fork!({ id: 'child-1', label: '子' });
@@ -97,15 +91,13 @@ describe('session-runtime adapters', () => {
       messages: vi.fn().mockResolvedValue([]),
       consolidate: vi.fn(),
     };
-    const runtime = await adaptSessionToEngineRuntime(session, {
-      consolidateFn: vi.fn(),
-    });
+    const runtime = await adaptSessionToEngineRuntime(session, {});
     expect(runtime.fork).toBeUndefined();
   });
 
-  it('fork 时覆盖 consolidateFn，子 session 使用新函数', async () => {
-    const parentConsolidateFn = vi.fn().mockResolvedValue('parent-memory');
-    const childConsolidateFn = vi.fn().mockResolvedValue('child-memory');
+  it('fork 时传入 consolidateFn/compressFn 透传给 session.fork()', async () => {
+    const consolidateFn = vi.fn().mockResolvedValue('memory');
+    const compressFn = vi.fn().mockResolvedValue('compressed');
     const childSession = {
       meta: { id: 'child-1', status: 'active' as const },
       send: vi.fn().mockResolvedValue({ content: 'hi', toolCalls: [] }),
@@ -120,152 +112,16 @@ describe('session-runtime adapters', () => {
       fork: vi.fn().mockResolvedValue(childSession),
     };
 
-    const runtime = await adaptSessionToEngineRuntime(parentSession, {
-      consolidateFn: parentConsolidateFn,
-    });
+    const runtime = await adaptSessionToEngineRuntime(parentSession, {});
 
-    const child = await runtime.fork!({
+    await runtime.fork!({ id: 'child-1', label: '子', consolidateFn, compressFn });
+
+    // forkOptions 原样透传给 session.fork()，session 层自行处理 fn 继承
+    expect(parentSession.fork).toHaveBeenCalledWith({
       id: 'child-1',
       label: '子',
-      consolidateFn: childConsolidateFn,
+      consolidateFn,
+      compressFn,
     });
-
-    await child.consolidate();
-    expect(childSession.consolidate).toHaveBeenCalledWith(childConsolidateFn);
-  });
-
-  it('fork 时未指定 consolidateFn，子 session 继承父的', async () => {
-    const parentConsolidateFn = vi.fn().mockResolvedValue('parent-memory');
-    const childSession = {
-      meta: { id: 'child-1', status: 'active' as const },
-      send: vi.fn().mockResolvedValue({ content: 'hi', toolCalls: [] }),
-      messages: vi.fn().mockResolvedValue([]),
-      consolidate: vi.fn(),
-    };
-    const parentSession = {
-      meta: { id: 'p1', status: 'active' as const },
-      send: vi.fn(),
-      messages: vi.fn().mockResolvedValue([]),
-      consolidate: vi.fn(),
-      fork: vi.fn().mockResolvedValue(childSession),
-    };
-
-    const runtime = await adaptSessionToEngineRuntime(parentSession, {
-      consolidateFn: parentConsolidateFn,
-    });
-
-    const child = await runtime.fork!({ id: 'child-1', label: '子' });
-
-    await child.consolidate();
-    expect(childSession.consolidate).toHaveBeenCalledWith(parentConsolidateFn);
-  });
-
-  it('嵌套 fork 继承链：孙 session 继承子 session 覆盖的 consolidateFn', async () => {
-    const parentConsolidateFn = vi.fn().mockResolvedValue('parent-memory');
-    const childConsolidateFn = vi.fn().mockResolvedValue('child-memory');
-    const grandchildSession = {
-      meta: { id: 'gc-1', status: 'active' as const },
-      send: vi.fn().mockResolvedValue({ content: 'hi', toolCalls: [] }),
-      messages: vi.fn().mockResolvedValue([]),
-      consolidate: vi.fn(),
-    };
-    const childSession = {
-      meta: { id: 'child-1', status: 'active' as const },
-      send: vi.fn().mockResolvedValue({ content: 'hi', toolCalls: [] }),
-      messages: vi.fn().mockResolvedValue([]),
-      consolidate: vi.fn(),
-      fork: vi.fn().mockResolvedValue(grandchildSession),
-    };
-    const parentSession = {
-      meta: { id: 'p1', status: 'active' as const },
-      send: vi.fn(),
-      messages: vi.fn().mockResolvedValue([]),
-      consolidate: vi.fn(),
-      fork: vi.fn().mockResolvedValue(childSession),
-    };
-
-    const runtime = await adaptSessionToEngineRuntime(parentSession, {
-      consolidateFn: parentConsolidateFn,
-    });
-
-    // 子 session 覆盖 consolidateFn
-    const child = await runtime.fork!({
-      id: 'child-1',
-      label: '子',
-      consolidateFn: childConsolidateFn,
-    });
-
-    // 孙 session 未指定，应继承子的 childConsolidateFn
-    const grandchild = await child.fork!({ id: 'gc-1', label: '孙' });
-
-    await grandchild.consolidate();
-    expect(grandchildSession.consolidate).toHaveBeenCalledWith(childConsolidateFn);
-  });
-
-  it('fork 时覆盖 compressFn，子 session 使用新函数', async () => {
-    const parentCompressFn = vi.fn().mockResolvedValue('parent-compressed');
-    const childCompressFn = vi.fn().mockResolvedValue('child-compressed');
-    const childSession = {
-      meta: { id: 'child-1', status: 'active' as const },
-      send: vi.fn().mockResolvedValue({ content: 'hi', toolCalls: [] }),
-      messages: vi.fn().mockResolvedValue([]),
-      consolidate: vi.fn(),
-      fork: vi.fn(),
-    };
-    const parentSession = {
-      meta: { id: 'p1', status: 'active' as const },
-      send: vi.fn(),
-      messages: vi.fn().mockResolvedValue([]),
-      consolidate: vi.fn(),
-      fork: vi.fn().mockResolvedValue(childSession),
-    };
-
-    const runtime = await adaptSessionToEngineRuntime(parentSession, {
-      consolidateFn: vi.fn(),
-      compressFn: parentCompressFn,
-    });
-
-    const child = await runtime.fork!({
-      id: 'child-1',
-      label: '子',
-      compressFn: childCompressFn,
-    });
-
-    // 验证子 runtime 的 options 中 compressFn 已被覆盖
-    // 通过再次 fork 孙 session 来间接验证继承链
-    const grandchildSession = {
-      meta: { id: 'gc-1', status: 'active' as const },
-      send: vi.fn().mockResolvedValue({ content: 'hi', toolCalls: [] }),
-      messages: vi.fn().mockResolvedValue([]),
-      consolidate: vi.fn(),
-    };
-    childSession.fork.mockResolvedValue(grandchildSession);
-
-    const grandchild = await child.fork!({ id: 'gc-1', label: '孙' });
-    // 孙 session 继承子的 compressFn（间接验证子 runtime 持有 childCompressFn）
-    // 此处验证 compressFn 在 options 中被正确传递
-    await grandchild.consolidate();
-    // consolidateFn 应继承父的（未覆盖）
-    expect(grandchildSession.consolidate).toHaveBeenCalled();
-  });
-
-  it('可以把真实 MainSession 适配成 SchedulerMainSession', async () => {
-    const mainSession = {
-      integrate: vi.fn().mockResolvedValue({
-        synthesis: 's',
-        insights: [],
-      }),
-    };
-    const integrateFn = vi.fn().mockResolvedValue({
-      synthesis: 's',
-      insights: [],
-    });
-
-    const schedulerMain = adaptMainSessionToSchedulerMainSession(mainSession as never, {
-      integrateFn,
-    });
-
-    await schedulerMain.integrate();
-    expect(mainSession.integrate).toHaveBeenCalledWith(integrateFn);
   });
 });

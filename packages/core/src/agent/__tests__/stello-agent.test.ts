@@ -300,7 +300,7 @@ describe('StelloAgent', () => {
     });
   });
 
-  it('支持通过 session.sessionResolver + consolidateFn 正式接入 Session 配置', async () => {
+  it('支持通过 session.sessionResolver 正式接入 Session 配置', async () => {
     const session = {
       meta: {
         id: 'root',
@@ -330,7 +330,6 @@ describe('StelloAgent', () => {
       memory: {} as MemoryEngine,
       session: {
         sessionResolver: vi.fn().mockResolvedValue(session),
-        consolidateFn: vi.fn().mockResolvedValue('memory'),
       },
       capabilities: {
         lifecycle: {

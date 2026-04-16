@@ -19,14 +19,11 @@ import {
   type OrchestrationStrategy,
 } from '../orchestrator/session-orchestrator';
 import {
-  adaptMainSessionToSchedulerMainSession,
   adaptSessionToEngineRuntime,
   serializeSessionSendResult,
   sessionSendResultParser,
   type MainSessionCompatible,
   type SessionCompatible,
-  type SessionCompatibleConsolidateFn,
-  type SessionCompatibleIntegrateFn,
   type SessionCompatibleCompressFn,
   type SessionCompatibleSendResult,
 } from '../adapters/session-runtime';
@@ -59,10 +56,6 @@ export interface StelloAgentSessionConfig {
   sessionResolver?: (sessionId: string) => Promise<SessionCompatible>;
   /** 解析 MainSession（可选，仅在需要 integration 时提供） */
   mainSessionResolver?: () => Promise<MainSessionCompatible | null>;
-  /** Session L3 → L2 的提炼函数 */
-  consolidateFn?: SessionCompatibleConsolidateFn;
-  /** MainSession integration 函数 */
-  integrateFn?: SessionCompatibleIntegrateFn;
   /** 上下文压缩函数（超阈值时调用） */
   compressFn?: SessionCompatibleCompressFn;
   /** send() 结果序列化方式，默认 JSON 序列化 */
@@ -112,9 +105,8 @@ function resolveRuntimeResolver(config: StelloAgentConfig): SessionRuntimeResolv
     return config.runtime.resolver;
   }
 
-  if (config.session?.sessionResolver && config.session.consolidateFn) {
+  if (config.session?.sessionResolver) {
     const adaptOptions = {
-      consolidateFn: config.session!.consolidateFn!,
       compressFn: config.session!.compressFn,
       serializeResult: config.session!.serializeSendResult ?? serializeSessionSendResult,
     };
@@ -127,7 +119,7 @@ function resolveRuntimeResolver(config: StelloAgentConfig): SessionRuntimeResolv
   }
 
   throw new Error(
-    'StelloAgentConfig 缺少 runtime.resolver；若使用 session 配置接入，请提供 session.sessionResolver + session.consolidateFn',
+    'StelloAgentConfig 缺少 runtime.resolver；若使用 session 配置接入，请提供 session.sessionResolver',
   );
 }
 
@@ -136,15 +128,12 @@ function resolveMainSession(config: StelloAgentConfig): SchedulerMainSession | n
     return config.orchestration.mainSession;
   }
 
-  if (config.session?.mainSessionResolver && config.session.integrateFn) {
+  if (config.session?.mainSessionResolver) {
     return {
       async integrate(): Promise<void> {
         const mainSession = await config.session!.mainSessionResolver!();
         if (!mainSession) return;
-        const adapted = adaptMainSessionToSchedulerMainSession(mainSession, {
-          integrateFn: config.session!.integrateFn!,
-        });
-        await adapted.integrate();
+        await mainSession.integrate();
       },
     };
   }

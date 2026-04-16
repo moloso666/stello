@@ -53,14 +53,12 @@ export { createSkillToolDefinition, executeSkillTool } from './skill/skill-tool'
 export { loadSkillsFromDirectory, parseFrontmatter } from './skill/skill-loader';
 export {
   adaptSessionToEngineRuntime,
-  adaptMainSessionToSchedulerMainSession,
   serializeSessionSendResult,
   sessionSendResultParser,
   toCoreToolCalls,
 } from './adapters/session-runtime';
 export type {
   SessionRuntimeAdapterOptions,
-  MainSessionAdapterOptions,
   SessionCompatible,
   MainSessionCompatible,
   SessionCompatibleToolCall,
