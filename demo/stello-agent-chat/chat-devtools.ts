@@ -33,6 +33,9 @@ import { startDevtools, type DevtoolsPersistedState, type DevtoolsStateStore } f
 import {
   createOpenAICompatibleAdapter,
 } from '../../packages/session/src/adapters/openai-compatible'
+import {
+  createAnthropicAdapter,
+} from '../../packages/session/src/adapters/anthropic'
 import { loadMainSession } from '../../packages/session/src/create-main-session'
 import { loadSession } from '../../packages/session/src/create-session'
 import { InMemoryStorageAdapter } from '../../packages/session/src/mocks/in-memory-storage'
@@ -48,16 +51,17 @@ let attachedEngineSeq = 0
 
 export { dataDirAbs }
 
+// Support both Anthropic and OpenAI-compatible providers
+const anthropicApiKey = process.env.ANTHROPIC_API_KEY
+const anthropicModel = process.env.ANTHROPIC_MODEL ?? 'claude-sonnet-4-20250514'
 const openaiApiKey = process.env.OPENAI_API_KEY
 const openaiBaseURL = process.env.OPENAI_BASE_URL ?? 'https://api.minimaxi.com/v1'
 const openaiModel = process.env.OPENAI_MODEL ?? 'MiniMax-M2.7'
 const openaiMaxContextTokens = Number(process.env.OPENAI_MAX_CONTEXT_TOKENS ?? 1_000_000)
+const useAnthropic = !!anthropicApiKey
 
-if (!openaiApiKey) {
-  console.error('Missing OPENAI_API_KEY')
-  console.error('  export OPENAI_BASE_URL=https://api.minimaxi.com/v1')
-  console.error('  export OPENAI_API_KEY=your_key')
-  console.error('  export OPENAI_MODEL=MiniMax-M2.7')
+if (!anthropicApiKey && !openaiApiKey) {
+  console.error('Missing API key. Set either ANTHROPIC_API_KEY or OPENAI_API_KEY')
   process.exit(1)
 }
 
@@ -362,6 +366,7 @@ function wrapMainSession(
   session: MainSession,
   memoryEngine?: MemoryEngine,
   sessionMap?: Map<string, WrappedSession | WrappedMainSession>,
+  consolidateFn?: ConsolidateFn,
 ) {
   return {
     get meta() {
@@ -380,7 +385,8 @@ function wrapMainSession(
     ...(sessionMap
       ? {
           async fork(options: SessionCompatibleForkOptions) {
-            const child = await session.fork(options as Parameters<MainSession['fork']>[0])
+            const forkOpts = { ...options, consolidateFn } as Parameters<MainSession['fork']>[0]
+            const child = await session.fork(forkOpts)
             sessionMap!.set(child.meta.id, { session: child })
             return wrapStandardSession(child.meta.id, child, memoryEngine, sessionMap!)
           },
@@ -465,19 +471,25 @@ export async function bootstrap() {
   const fs = new NodeFileSystemAdapter(dataDir)
   const sessions = new SessionTreeImpl(fs)
   const stateStore = createFileDevtoolsStateStore(fs)
-  let currentLlm = createOpenAICompatibleAdapter({
-    apiKey: openaiApiKey!,
-    baseURL: openaiBaseURL,
-    model: openaiModel,
-    maxContextTokens: openaiMaxContextTokens,
-  })
+  let currentLlm = useAnthropic
+    ? createAnthropicAdapter({
+        apiKey: anthropicApiKey!,
+        model: anthropicModel,
+        maxContextTokens: 200_000,
+      })
+    : createOpenAICompatibleAdapter({
+        apiKey: openaiApiKey!,
+        baseURL: openaiBaseURL,
+        model: openaiModel,
+        maxContextTokens: openaiMaxContextTokens,
+      })
   let currentLlmConfig = {
-    model: openaiModel,
-    baseURL: openaiBaseURL,
-    apiKey: openaiApiKey!,
+    model: useAnthropic ? anthropicModel : openaiModel,
+    baseURL: useAnthropic ? 'https://api.anthropic.com' : openaiBaseURL,
+    apiKey: useAnthropic ? anthropicApiKey! : openaiApiKey!,
     temperature: 0.7,
     maxTokens: 2048,
-    maxContextTokens: openaiMaxContextTokens,
+    maxContextTokens: useAnthropic ? 200_000 : openaiMaxContextTokens,
   }
 
   const llmCall: LLMCallFn = async (messages) => {
@@ -681,7 +693,7 @@ export async function bootstrap() {
         const entry = sessionMap.get(sessionId)
         if (entry) {
           if ('main' in entry && entry.main) {
-            return wrapMainSession(sessionId, entry.main, memory, sessionMap)
+            return wrapMainSession(sessionId, entry.main, memory, sessionMap, consolidateFn)
           }
           return wrapStandardSession(sessionId, entry.session, memory, sessionMap)
         }
@@ -932,8 +944,8 @@ async function main() {
   })
 
   console.log(`\nStello 留学选校顾问 Demo`)
-  console.log(`  Model:    ${openaiModel}`)
-  console.log(`  Base URL: ${openaiBaseURL}`)
+  console.log(`  Model:    ${useAnthropic ? anthropicModel : openaiModel}`)
+  console.log(`  Provider: ${useAnthropic ? 'Anthropic' : openaiBaseURL}`)
   console.log(`  DevTools: http://${host}:${dt.port}`)
   console.log(`\n  试试说：「我想申请 CS 硕士，考虑美国和英国」\n`)
 }
